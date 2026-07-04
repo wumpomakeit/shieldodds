@@ -1,0 +1,2467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShieldOdds — Place Your Prediction Quietly</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/favicon-192.png" />
+  <link rel="apple-touch-icon" href="assets/favicon-180.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Inter:wght@300..700&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+  <style>
+    /* ═══════════════════════════════════════════
+       RESET & BASE
+    ═══════════════════════════════════════════ */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --cream:        #FFF8F0;
+      --cream-mid:    #FFF1E0;
+      --cream-dark:   #F5E6D3;
+      --sand:         #EDD9C0;
+      --amber:        #E8873A;
+      --amber-dark:   #D4722A;
+      --amber-light:  #F4A261;
+      --coral:        #E76F51;
+      --charcoal:     #1A1A1A;
+      --ink:          #2D2D2D;
+      --slate:        #6B6B6B;
+      --light-gray:   #A8A8A8;
+      --yes-green:    #4CAF50;
+      --yes-bg:       #E8F5E9;
+      --no-red:       #E53935;
+      --no-bg:        #FFEBEE;
+      --radius:       16px;
+      --radius-sm:    10px;
+      --max-width:    1200px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--cream);
+      color: var(--ink);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ═══════════════════════════════════════════
+       NAVBAR — floating pill
+    ═══════════════════════════════════════════ */
+    .navbar-wrap {
+      position: fixed;
+      top: 16px;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+      display: flex;
+      justify-content: center;
+      padding: 0 clamp(16px, 4vw, 32px);
+      pointer-events: none;
+      transition: transform 0.35s cubic-bezier(.4,0,.2,1), opacity 0.35s ease;
+    }
+
+    .navbar-wrap.nav-hidden {
+      transform: translateY(-120%);
+      opacity: 0;
+    }
+
+    .navbar {
+      pointer-events: auto;
+      max-width: 820px;
+      width: 100%;
+      background: rgba(255, 252, 247, 0.92);
+      border: 1px solid rgba(0,0,0,0.06);
+      border-radius: 22px;
+      padding: 0 8px 0 16px;
+      box-shadow:
+        0 2px 8px rgba(0,0,0,0.04),
+        0 8px 32px rgba(0,0,0,0.07);
+    }
+
+    .navbar-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 56px;
+      gap: 8px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      text-decoration: none;
+      color: var(--charcoal);
+      flex-shrink: 0;
+    }
+
+    .logo-icon {
+      height: 30px;
+      width: auto;
+      display: block;
+    }
+
+    .logo-text {
+      font-family: 'Fraunces', serif;
+      font-size: 20px;
+      letter-spacing: -0.3px;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      text-decoration: none;
+      color: var(--slate);
+      font-size: 14px;
+      font-weight: 500;
+      padding: 6px 14px;
+      border-radius: 10px;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .nav-links a:hover {
+      color: var(--charcoal);
+      background: var(--cream-mid);
+    }
+
+    .btn-connect {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 18px;
+      background: var(--charcoal);
+      color: white;
+      border: none;
+      border-radius: 50px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      flex-shrink: 0;
+    }
+
+    .btn-connect:hover {
+      background: var(--ink);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    }
+
+    .btn-connect.connected { background: var(--yes-green); }
+
+    .btn-connect .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--amber);
+    }
+
+    .btn-connect.connected .dot { background: #a5d6a7; }
+
+    /* ═══════════════════════════════════════════
+       HERO
+    ═══════════════════════════════════════════ */
+    .hero {
+      padding: 120px clamp(16px, 4vw, 48px) 80px;
+      position: relative;
+      overflow: hidden;
+      min-height: 90vh;
+      display: flex;
+      align-items: center;
+    }
+
+    .hero-bg {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    .hero-bg::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: -20%;
+      width: 80%;
+      height: 100%;
+      background:
+        radial-gradient(circle at 60% 40%, rgba(232, 135, 58, 0.08) 0%, transparent 50%),
+        radial-gradient(circle at 80% 70%, rgba(244, 162, 97, 0.06) 0%, transparent 40%);
+    }
+
+    .hero-deco {
+      position: absolute;
+      border: 1.5px dashed var(--sand);
+      border-radius: 50%;
+      opacity: 0.5;
+    }
+
+    .hero-deco-1 { width: 400px; height: 400px; top: -100px; right: -50px; }
+    .hero-deco-2 { width: 250px; height: 250px; bottom: -80px; right: 200px; }
+    .hero-deco-3 { width: 150px; height: 150px; top: 200px; right: 100px; }
+
+    .hero-inner {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      align-items: center;
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-content h1 {
+      font-family: 'Fraunces', serif;
+      font-size: clamp(38px, 5vw, 64px);
+      line-height: 1.1;
+      color: var(--charcoal);
+      margin-bottom: 24px;
+      letter-spacing: -1px;
+    }
+
+    .hero-content h1 .highlight {
+      color: var(--amber);
+      position: relative;
+    }
+
+    .hero-content h1 .highlight::after {
+      content: '';
+      position: absolute;
+      bottom: 2px;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: var(--amber-light);
+      opacity: 0.4;
+      border-radius: 2px;
+    }
+
+    .hero-subtitle {
+      font-size: clamp(16px, 1.8vw, 20px);
+      color: var(--slate);
+      line-height: 1.7;
+      margin-bottom: 36px;
+      max-width: 480px;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 32px;
+      background: var(--amber);
+      color: white;
+      border: 2px solid var(--amber);
+      border-radius: 50px;
+      font-family: inherit;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.25s ease;
+    }
+
+    .btn-primary:hover {
+      background: var(--amber-dark);
+      border-color: var(--amber-dark);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(232, 135, 58, 0.3);
+    }
+
+    .btn-primary .arrow {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      background: rgba(255,255,255,0.25);
+      border-radius: 50%;
+      transition: transform 0.2s ease;
+    }
+
+    .btn-primary:hover .arrow { transform: translateX(3px); }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 32px;
+      background: transparent;
+      color: var(--charcoal);
+      border: 2px solid var(--sand);
+      border-radius: 50px;
+      font-family: inherit;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.25s ease;
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--charcoal);
+      transform: translateY(-2px);
+    }
+
+    /* Hero card */
+    .hero-visual {
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .hero-card {
+      width: 100%;
+      max-width: 480px;
+      background: white;
+      border-radius: 24px;
+      padding: 32px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 8px 32px rgba(0,0,0,0.06);
+      border: 1px solid rgba(0,0,0,0.06);
+      position: relative;
+    }
+
+    .hero-card::before {
+      content: '';
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      width: 60px;
+      height: 60px;
+      border: 2px dashed var(--sand);
+      border-radius: 12px;
+      z-index: -1;
+    }
+
+    .hero-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .hero-card-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      background: var(--cream-mid);
+      border-radius: 50px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--amber);
+    }
+
+    .hero-card-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: var(--yes-bg);
+      border-radius: 50px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--yes-green);
+    }
+
+    .hero-card-status .pulse {
+      width: 6px;
+      height: 6px;
+      background: var(--yes-green);
+      border-radius: 50%;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.3); }
+    }
+
+    .hero-card-question {
+      font-family: 'Fraunces', serif;
+      font-size: 20px;
+      line-height: 1.4;
+      color: var(--charcoal);
+      margin-bottom: 24px;
+    }
+
+    .hero-card-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-item {
+      text-align: center;
+      padding: 12px;
+      background: var(--cream);
+      border-radius: var(--radius-sm);
+    }
+
+    .stat-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--light-gray);
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--charcoal);
+    }
+
+    .hero-card-sides {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .side-btn {
+      padding: 14px;
+      border-radius: var(--radius-sm);
+      border: 2px solid;
+      text-align: center;
+      font-weight: 600;
+      font-size: 15px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+
+    .side-yes {
+      background: var(--yes-bg);
+      border-color: var(--yes-green);
+      color: var(--yes-green);
+    }
+
+    .side-yes:hover { background: var(--yes-green); color: white; }
+
+    .side-no {
+      background: var(--no-bg);
+      border-color: var(--no-red);
+      color: var(--no-red);
+    }
+
+    .side-no:hover { background: var(--no-red); color: white; }
+
+    .hero-card-footer {
+      margin-top: 16px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--light-gray);
+    }
+
+    .hero-card-footer svg { width: 14px; height: 14px; opacity: 0.5; }
+
+    .float-badge {
+      position: absolute;
+      padding: 8px 16px;
+      border-radius: 50px;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+      animation: float 4s ease-in-out infinite;
+    }
+
+    .float-badge-1 {
+      top: -10px; left: -30px;
+      background: white; color: var(--amber);
+      border: 1px solid var(--cream-dark);
+      animation-delay: 0s;
+    }
+
+    .float-badge-2 {
+      bottom: 40px; right: -40px;
+      background: var(--charcoal); color: white;
+      animation-delay: 1.5s;
+    }
+
+    .float-badge-3 {
+      bottom: -15px; left: 20px;
+      background: white; color: var(--yes-green);
+      border: 1px solid var(--cream-dark);
+      animation-delay: 3s;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+
+    /* ═══════════════════════════════════════════
+       SECTION SHARED
+    ═══════════════════════════════════════════ */
+    .section-inner {
+      max-width: var(--max-width);
+      margin: 0 auto;
+    }
+
+    .section-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 18px;
+      background: var(--cream);
+      border-radius: 50px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--amber);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-family: 'Fraunces', serif;
+      font-size: clamp(32px, 4vw, 48px);
+      line-height: 1.15;
+      color: var(--charcoal);
+      margin-bottom: 16px;
+      letter-spacing: -0.5px;
+    }
+
+    .section-desc {
+      font-size: 18px;
+      color: var(--slate);
+      line-height: 1.7;
+      max-width: 600px;
+      margin-bottom: 60px;
+    }
+
+    .section-divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--sand), transparent);
+    }
+
+    /* ═══════════════════════════════════════════
+       HOW IT WORKS
+    ═══════════════════════════════════════════ */
+    .how-it-works {
+      padding: 100px clamp(16px, 4vw, 48px);
+      background: white;
+      position: relative;
+    }
+
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+      position: relative;
+    }
+
+    .steps-grid::before {
+      content: '';
+      position: absolute;
+      top: 60px;
+      left: 12.5%;
+      width: 75%;
+      height: 2px;
+      background: repeating-linear-gradient(90deg, var(--sand) 0, var(--sand) 8px, transparent 8px, transparent 16px);
+      z-index: 0;
+    }
+
+    .step-card {
+      background: var(--cream);
+      border-radius: var(--radius);
+      padding: 32px 24px;
+      position: relative;
+      z-index: 1;
+      transition: all 0.3s ease;
+      border: 1px solid transparent;
+    }
+
+    .step-card:hover {
+      border-color: var(--sand);
+      transform: translateY(-4px);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.06);
+    }
+
+    .step-number {
+      width: 56px;
+      height: 56px;
+      background: white;
+      border: 2px solid var(--sand);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Fraunces', serif;
+      font-size: 22px;
+      color: var(--amber);
+      margin-bottom: 24px;
+      position: relative;
+    }
+
+    .step-card:hover .step-number {
+      background: var(--amber);
+      border-color: var(--amber);
+      color: white;
+    }
+
+    .step-icon {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      width: 28px;
+      height: 28px;
+      background: var(--cream-mid);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+
+    .step-title {
+      font-weight: 700;
+      font-size: 18px;
+      color: var(--charcoal);
+      margin-bottom: 12px;
+      line-height: 1.3;
+    }
+
+    .step-desc {
+      font-size: 14px;
+      color: var(--slate);
+      line-height: 1.65;
+    }
+
+    .step-highlight {
+      display: inline-block;
+      margin-top: 16px;
+      padding: 6px 14px;
+      background: white;
+      border-radius: 50px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--amber);
+      border: 1px solid var(--cream-dark);
+    }
+
+    /* ═══════════════════════════════════════════
+       COMPARISON
+    ═══════════════════════════════════════════ */
+    .comparison {
+      padding: 100px clamp(16px, 4vw, 48px);
+      background: var(--cream);
+    }
+
+    .comparison-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      background: white;
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 8px 32px rgba(0,0,0,0.06);
+    }
+
+    .comparison-table thead th {
+      padding: 20px 24px;
+      text-align: left;
+      font-weight: 700;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--slate);
+      background: var(--cream);
+      border-bottom: 2px solid var(--cream-dark);
+    }
+
+    .comparison-table thead th:first-child {
+      border-top-left-radius: var(--radius);
+    }
+
+    .comparison-table thead th:last-child {
+      border-top-right-radius: var(--radius);
+    }
+
+    .comparison-table thead th.highlight-col {
+      background: var(--amber);
+      color: white;
+    }
+
+    .comparison-table tbody td {
+      padding: 18px 24px;
+      font-size: 15px;
+      color: var(--ink);
+      border-bottom: 1px solid var(--cream-dark);
+      vertical-align: top;
+    }
+
+    .comparison-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .comparison-table tbody td:first-child {
+      font-weight: 600;
+      color: var(--slate);
+      width: 200px;
+    }
+
+    .comparison-table tbody td.highlight-col {
+      background: rgba(232, 135, 58, 0.04);
+    }
+
+    .check { color: var(--yes-green); font-weight: 700; }
+    .cross { color: var(--no-red); font-weight: 700; }
+
+    /* ═══════════════════════════════════════════
+       TECHNICAL PROCESS
+    ═══════════════════════════════════════════ */
+    .technical {
+      padding: 100px clamp(16px, 4vw, 48px);
+      background: white;
+    }
+
+    .process-flow {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0;
+      position: relative;
+    }
+
+    .process-step {
+      padding: 32px;
+      position: relative;
+      border: 1px solid var(--cream-dark);
+      border-right: none;
+    }
+
+    .process-step:last-child {
+      border-right: 1px solid var(--cream-dark);
+    }
+
+    .process-step:first-child {
+      border-radius: var(--radius) 0 0 var(--radius);
+    }
+
+    .process-step:last-child {
+      border-radius: 0 var(--radius) var(--radius) 0;
+    }
+
+    .process-step-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .process-step-num {
+      width: 36px;
+      height: 36px;
+      background: var(--amber);
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .process-step-title {
+      font-weight: 700;
+      font-size: 16px;
+      color: var(--charcoal);
+    }
+
+    .process-detail {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .process-detail.public {
+      background: var(--cream);
+      color: var(--ink);
+    }
+
+    .process-detail.encrypted {
+      background: var(--amber);
+      color: white;
+      font-weight: 600;
+    }
+
+    .process-detail .detail-icon {
+      flex-shrink: 0;
+      width: 18px;
+      text-align: center;
+    }
+
+    .process-legend {
+      display: flex;
+      gap: 24px;
+      margin-top: 32px;
+      justify-content: center;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--slate);
+    }
+
+    .legend-swatch {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+    }
+
+    .legend-swatch.pub { background: var(--cream); border: 1px solid var(--sand); }
+    .legend-swatch.enc { background: var(--amber); }
+
+    /* ═══════════════════════════════════════════
+       TECH STACK
+    ═══════════════════════════════════════════ */
+    .tech-stack {
+      padding: 100px clamp(16px, 4vw, 48px);
+      background: var(--charcoal);
+      color: white;
+    }
+
+    .tech-stack .section-label {
+      background: rgba(255,255,255,0.1);
+      color: var(--amber-light);
+    }
+
+    .tech-stack .section-title { color: white; }
+    .tech-stack .section-desc { color: rgba(255,255,255,0.6); }
+
+    .tech-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+    }
+
+    .tech-item {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: var(--radius);
+      padding: 32px 24px;
+      transition: all 0.3s ease;
+    }
+
+    .tech-item:hover {
+      background: rgba(255,255,255,0.1);
+      border-color: var(--amber);
+      transform: translateY(-4px);
+    }
+
+    .tech-icon {
+      width: 56px;
+      height: 56px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      margin-bottom: 20px;
+    }
+
+    .tech-name {
+      font-weight: 700;
+      font-size: 18px;
+      color: white;
+      margin-bottom: 8px;
+    }
+
+    .tech-role {
+      font-size: 13px;
+      color: var(--amber-light);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+
+    .tech-desc {
+      font-size: 14px;
+      color: rgba(255,255,255,0.55);
+      line-height: 1.6;
+    }
+
+    /* ═══════════════════════════════════════════
+       LIVE MARKETS
+    ═══════════════════════════════════════════ */
+    .markets {
+      padding: 100px clamp(16px, 4vw, 48px);
+      background: var(--cream);
+    }
+
+    .markets-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .market-card {
+      background: white;
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+      border: 1px solid rgba(0,0,0,0.06);
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 24px;
+      align-items: center;
+      transition: all 0.3s ease;
+    }
+
+    .market-card:hover {
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      transform: translateY(-2px);
+    }
+
+    .market-info { flex: 1; }
+
+    .market-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .market-id {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--amber);
+      background: var(--cream-mid);
+      padding: 4px 10px;
+      border-radius: 50px;
+    }
+
+    .market-status-badge {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 50px;
+    }
+
+    .market-status-badge.open { background: var(--yes-bg); color: var(--yes-green); }
+    .market-status-badge.resolved { background: #FFF3E0; color: var(--amber); }
+    .market-status-badge.settled { background: #F5F5F5; color: var(--slate); }
+    .market-status-badge.cancelled { background: var(--no-bg); color: var(--no-red); }
+
+    .market-question {
+      font-family: 'Fraunces', serif;
+      font-size: 20px;
+      color: var(--charcoal);
+      margin-bottom: 12px;
+      line-height: 1.4;
+    }
+
+    .market-stats {
+      display: flex;
+      gap: 24px;
+      font-size: 14px;
+      color: var(--slate);
+    }
+
+    .market-stat {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .market-stat strong {
+      color: var(--charcoal);
+    }
+
+    .market-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: flex-end;
+    }
+
+    .btn-bet {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      background: var(--amber);
+      color: white;
+      border: none;
+      border-radius: 50px;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .btn-bet:hover {
+      background: var(--amber-dark);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(232, 135, 58, 0.3);
+    }
+
+    .btn-bet:disabled {
+      background: var(--light-gray);
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
+
+    .btn-claim {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 20px;
+      background: var(--yes-green);
+      color: white;
+      border: none;
+      border-radius: 50px;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      white-space: nowrap;
+    }
+
+    .btn-claim:hover {
+      background: #43A047;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(76, 175, 80, 0.3);
+    }
+
+    .btn-claim:disabled {
+      background: var(--light-gray);
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .market-outcome-badge {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: var(--yes-bg);
+      color: var(--yes-green);
+    }
+
+    .markets-empty {
+      text-align: center;
+      padding: 60px 20px;
+      background: white;
+      border-radius: var(--radius);
+      border: 2px dashed var(--sand);
+    }
+
+    .markets-empty-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+
+    .markets-empty h3 {
+      font-family: 'Fraunces', serif;
+      font-size: 24px;
+      color: var(--charcoal);
+      margin-bottom: 8px;
+    }
+
+    .markets-empty p {
+      color: var(--slate);
+      font-size: 16px;
+    }
+
+    /* ═══════════════════════════════════════════
+       BET MODAL
+    ═══════════════════════════════════════════ */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      backdrop-filter: blur(4px);
+      z-index: 2000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .modal-overlay.active { display: flex; }
+
+    .modal {
+      background: white;
+      border-radius: 24px;
+      padding: 36px;
+      max-width: 440px;
+      width: 100%;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.2);
+      position: relative;
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      width: 36px;
+      height: 36px;
+      border: none;
+      background: var(--cream);
+      border-radius: 50%;
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--slate);
+      transition: all 0.2s ease;
+    }
+
+    .modal-close:hover { background: var(--cream-dark); color: var(--charcoal); }
+
+    .modal h3 {
+      font-family: 'Fraunces', serif;
+      font-size: 24px;
+      color: var(--charcoal);
+      margin-bottom: 8px;
+      padding-right: 40px;
+    }
+
+    .modal-question {
+      font-size: 14px;
+      color: var(--slate);
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+
+    .modal-sides {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .modal-side {
+      padding: 16px;
+      border-radius: var(--radius-sm);
+      border: 2px solid var(--cream-dark);
+      text-align: center;
+      font-weight: 600;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+      background: white;
+      color: var(--slate);
+    }
+
+    .modal-side:hover { border-color: var(--amber); }
+
+    .modal-side.selected-yes {
+      border-color: var(--yes-green);
+      background: var(--yes-bg);
+      color: var(--yes-green);
+    }
+
+    .modal-side.selected-no {
+      border-color: var(--no-red);
+      background: var(--no-bg);
+      color: var(--no-red);
+    }
+
+    .modal-input-group {
+      margin-bottom: 24px;
+    }
+
+    .modal-input-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--slate);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .modal-input-wrap {
+      display: flex;
+      align-items: center;
+      background: var(--cream);
+      border: 2px solid var(--cream-dark);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      transition: border-color 0.2s ease;
+    }
+
+    .modal-input-wrap:focus-within { border-color: var(--amber); }
+
+    .modal-input-wrap input {
+      flex: 1;
+      padding: 14px 16px;
+      border: none;
+      background: transparent;
+      font-family: inherit;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--charcoal);
+      outline: none;
+    }
+
+    .modal-input-wrap .unit {
+      padding: 14px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--slate);
+      background: var(--cream-dark);
+    }
+
+    .modal-min-bet {
+      font-size: 12px;
+      color: var(--light-gray);
+      margin-top: 6px;
+    }
+
+    .modal-note {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 12px 16px;
+      background: var(--cream);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      color: var(--slate);
+      line-height: 1.5;
+      margin-bottom: 24px;
+    }
+
+    .modal-note .note-icon { flex-shrink: 0; }
+
+    .btn-place-bet {
+      width: 100%;
+      padding: 16px;
+      background: var(--amber);
+      color: white;
+      border: none;
+      border-radius: 50px;
+      font-family: inherit;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.25s ease;
+    }
+
+    .btn-place-bet:hover {
+      background: var(--amber-dark);
+      box-shadow: 0 8px 24px rgba(232, 135, 58, 0.3);
+    }
+
+    .btn-place-bet:disabled {
+      background: var(--light-gray);
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    /* ═══════════════════════════════════════════
+       FAQ
+    ═══════════════════════════════════════════ */
+    .faq {
+      padding: 100px clamp(16px, 4vw, 48px);
+      background: white;
+    }
+
+    .faq-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .faq-item {
+      background: var(--cream);
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid transparent;
+      transition: border-color 0.3s ease;
+    }
+
+    .faq-item:hover { border-color: var(--sand); }
+
+    .faq-q {
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      gap: 12px;
+    }
+
+    .faq-q span {
+      font-weight: 600;
+      font-size: 16px;
+      color: var(--charcoal);
+      line-height: 1.4;
+    }
+
+    .faq-toggle {
+      width: 32px;
+      height: 32px;
+      background: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      color: var(--amber);
+      flex-shrink: 0;
+      transition: transform 0.3s ease;
+    }
+
+    .faq-item.open .faq-toggle { transform: rotate(45deg); }
+
+    .faq-a {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease, padding 0.3s ease;
+    }
+
+    .faq-item.open .faq-a {
+      max-height: 300px;
+    }
+
+    .faq-a-inner {
+      padding: 0 24px 20px;
+      font-size: 15px;
+      color: var(--slate);
+      line-height: 1.7;
+    }
+
+    /* ═══════════════════════════════════════════
+       FOOTER
+    ═══════════════════════════════════════════ */
+    .footer {
+      background: var(--charcoal);
+      color: rgba(255,255,255,0.6);
+      padding: 60px clamp(16px, 4vw, 48px) 32px;
+    }
+
+    .footer-inner {
+      max-width: var(--max-width);
+      margin: 0 auto;
+    }
+
+    .footer-top {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 48px;
+      margin-bottom: 48px;
+    }
+
+    .footer-logo {
+      height: 36px;
+      width: auto;
+      margin-bottom: 14px;
+      filter: brightness(0) invert(1);    /* make white on dark bg */
+      opacity: 0.9;
+    }
+
+    .footer-brand p {
+      font-size: 14px;
+      line-height: 1.7;
+      max-width: 280px;
+    }
+
+    .footer-col h4 {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: rgba(255,255,255,0.4);
+      margin-bottom: 16px;
+    }
+
+    .footer-col a {
+      display: block;
+      color: rgba(255,255,255,0.6);
+      text-decoration: none;
+      font-size: 14px;
+      padding: 4px 0;
+      transition: color 0.2s ease;
+    }
+
+    .footer-col a:hover { color: var(--amber-light); }
+
+    .footer-bottom {
+      border-top: 1px solid rgba(255,255,255,0.1);
+      padding-top: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+    }
+
+    .footer-bottom a {
+      color: rgba(255,255,255,0.4);
+      text-decoration: none;
+    }
+
+    .footer-bottom a:hover { color: var(--amber-light); }
+
+    /* ═══════════════════════════════════════════
+       CONTRACT INFO BAR
+    ═══════════════════════════════════════════ */
+    .contract-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      padding: 12px clamp(16px, 4vw, 48px);
+      background: var(--charcoal);
+      color: rgba(255,255,255,0.7);
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .contract-bar a {
+      color: var(--amber-light);
+      text-decoration: none;
+    }
+
+    .contract-bar a:hover { color: var(--amber); text-decoration: underline; }
+
+    .contract-bar .sep {
+      width: 4px; height: 4px;
+      background: rgba(255,255,255,0.3);
+      border-radius: 50%;
+    }
+
+    /* ═══════════════════════════════════════════
+       TOAST
+    ═══════════════════════════════════════════ */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 14px 24px;
+      background: var(--charcoal);
+      color: white;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 500;
+      z-index: 9999;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s ease;
+      max-width: 400px;
+    }
+
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.error { background: var(--coral); }
+
+    /* ═══════════════════════════════════════════
+       RESPONSIVE
+    ═══════════════════════════════════════════ */
+    @media (max-width: 1024px) {
+      .tech-grid { grid-template-columns: 1fr 1fr; }
+      .footer-top { grid-template-columns: 1fr 1fr; gap: 32px; }
+    }
+
+    @media (max-width: 900px) {
+      .hero-inner { grid-template-columns: 1fr; gap: 40px; }
+      .hero-visual { order: -1; }
+      .hero-card { max-width: 400px; margin: 0 auto; }
+      .float-badge { display: none; }
+      .steps-grid { grid-template-columns: 1fr 1fr; }
+      .steps-grid::before { display: none; }
+      .nav-links { display: none; }
+      .process-flow { grid-template-columns: 1fr; }
+      .process-step { border-right: 1px solid var(--cream-dark); border-radius: var(--radius) !important; margin-bottom: -1px; }
+      .faq-grid { grid-template-columns: 1fr; }
+      .comparison-table { font-size: 14px; }
+      .comparison-table thead th, .comparison-table tbody td { padding: 14px 16px; }
+      .market-card { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 600px) {
+      .steps-grid { grid-template-columns: 1fr; }
+      .hero-card-stats { grid-template-columns: 1fr; }
+      .hero-actions { flex-direction: column; }
+      .btn-primary, .btn-secondary { justify-content: center; }
+      .tech-grid { grid-template-columns: 1fr; }
+      .footer-top { grid-template-columns: 1fr; gap: 24px; }
+      .footer-bottom { flex-direction: column; gap: 8px; text-align: center; }
+      .contract-bar { flex-direction: column; gap: 6px; font-size: 11px; }
+      .contract-bar .sep { display: none; }
+      .comparison-table { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ═══════ CONTRACT INFO BAR ═══════ -->
+  <div class="contract-bar">
+    <span>Sepolia Testnet</span>
+    <span class="sep"></span>
+    <span>Contract: <a href="https://sepolia.etherscan.io/address/0xEaD8ff0eA95d0f468a9A6C21bb1aD177e0685ada" target="_blank" rel="noopener">0xEaD8…5ada</a></span>
+    <span class="sep"></span>
+    <span>Powered by <a href="https://www.zama.ai/fhevm" target="_blank" rel="noopener">Zama fhEVM</a></span>
+  </div>
+
+  <!-- ═══════ NAVBAR ═══════ -->
+  <div class="navbar-wrap" id="navbarWrap">
+    <nav class="navbar">
+      <div class="navbar-inner">
+        <a href="#" class="logo">
+          <img src="assets/logo-icon.png" alt="ShieldOdds" class="logo-icon" />
+          <span class="logo-text">ShieldOdds</span>
+        </a>
+        <ul class="nav-links">
+          <li><a href="#how-it-works">How It Works</a></li>
+          <li><a href="#comparison">Compare</a></li>
+          <li><a href="#markets">Markets</a></li>
+          <li><a href="#faq">FAQ</a></li>
+        </ul>
+        <button class="btn-connect" id="connectBtn" onclick="connectWallet()">
+          <span class="dot"></span>
+          <span id="connectText">Connect Wallet</span>
+        </button>
+      </div>
+    </nav>
+  </div>
+
+  <!-- ═══════ HERO ═══════ -->
+  <section class="hero">
+    <div class="hero-bg">
+      <div class="hero-deco hero-deco-1"></div>
+      <div class="hero-deco hero-deco-2"></div>
+      <div class="hero-deco hero-deco-3"></div>
+    </div>
+    <div class="hero-inner">
+      <div class="hero-content">
+        <h1>Place Your Prediction<br/><span class="highlight">Quietly.</span></h1>
+        <p class="hero-subtitle">
+          ShieldOdds is a privacy-preserving prediction market where your bet
+          direction stays encrypted on-chain via FHE, while bet amounts and
+          market outcomes remain fully public and verifiable.
+        </p>
+        <div class="hero-actions">
+          <a href="#markets" class="btn-primary"><span class="arrow">→</span> Explore Markets</a>
+          <a href="#how-it-works" class="btn-secondary">Learn More</a>
+        </div>
+      </div>
+      <div class="hero-visual">
+        <div class="hero-card">
+          <div class="hero-card-header">
+            <span class="hero-card-badge"><span class="lock-icon">🔒</span> FHE-Encrypted</span>
+            <span class="hero-card-status" id="heroStatus"><span class="pulse"></span><span id="heroStatusText">Loading…</span></span>
+          </div>
+          <div class="hero-card-question" id="heroQuestion">Loading market data…</div>
+          <div class="hero-card-stats">
+            <div class="stat-item"><div class="stat-label">Pool</div><div class="stat-value" id="heroPool">—</div></div>
+            <div class="stat-item"><div class="stat-label">Bets</div><div class="stat-value" id="heroBets">—</div></div>
+            <div class="stat-item"><div class="stat-label">Ends</div><div class="stat-value" id="heroDeadline">—</div></div>
+          </div>
+          <div class="hero-card-sides" id="heroCardSides">
+            <button class="side-btn side-yes" onclick="openBetModal(heroMarketId, 1)">🛡️ YES</button>
+            <button class="side-btn side-no" onclick="openBetModal(heroMarketId, 0)">🛡️ NO</button>
+          </div>
+          <div class="hero-card-footer">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <span>Your bet direction is encrypted — amounts stay public</span>
+          </div>
+        </div>
+        <div class="float-badge float-badge-1">🔐 Encrypted Bets</div>
+        <div class="float-badge float-badge-2">⚡ Sepolia Live</div>
+        <div class="float-badge float-badge-3">✓ FHE Verified</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════ HOW IT WORKS ═══════ -->
+  <section class="how-it-works" id="how-it-works">
+    <div class="section-divider"></div>
+    <div style="padding-top:100px;"></div>
+    <div class="section-inner">
+      <div class="section-label"><span>⚙️</span> How It Works</div>
+      <h2 class="section-title">Four Steps to<br/>Confidential Predictions</h2>
+      <p class="section-desc">
+        ShieldOdds uses Fully Homomorphic Encryption (FHE) so no one — not even the
+        contract — can see which side you chose until settlement. Your bet amount stays
+        public for transparency; only the direction is shielded.
+      </p>
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-number">1<span class="step-icon">📝</span></div>
+          <div class="step-title">Create a Market</div>
+          <div class="step-desc">Anyone can create a prediction market by setting a question and a deadline. Markets are open for bets until the deadline passes.</div>
+          <span class="step-highlight">Permissionless</span>
+        </div>
+        <div class="step-card">
+          <div class="step-number">2<span class="step-icon">🔐</span></div>
+          <div class="step-title">Place Encrypted Bets</div>
+          <div class="step-desc">Choose YES or NO — your direction is encrypted client-side before hitting the chain. Send ETH as your wager. The amount is public; your choice stays hidden.</div>
+          <span class="step-highlight">Direction Encrypted</span>
+        </div>
+        <div class="step-card">
+          <div class="step-number">3<span class="step-icon">⚖️</span></div>
+          <div class="step-title">Resolve &amp; Settle</div>
+          <div class="step-desc">After the deadline, the creator resolves the outcome. The KMS decrypts all bet directions with proof, and the contract computes pro-rata payouts.</div>
+          <span class="step-highlight">KMS Verified</span>
+        </div>
+        <div class="step-card">
+          <div class="step-number">4<span class="step-icon">💰</span></div>
+          <div class="step-title">Claim Winnings</div>
+          <div class="step-desc">Winners withdraw their share of the pool proportional to their bet. If no one bet on the winning side, everyone gets a full refund.</div>
+          <span class="step-highlight">1% Protocol Fee</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════ COMPARISON ═══════ -->
+  <section class="comparison" id="comparison">
+    <div class="section-inner">
+      <div class="section-label"><span>⚖️</span> Compare</div>
+      <h2 class="section-title">ShieldOdds vs Polymarket</h2>
+      <p class="section-desc">
+        Traditional prediction markets expose every bet to the public.
+        ShieldOdds changes the game with FHE-encrypted bet directions.
+      </p>
+      <table class="comparison-table">
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th class="highlight-col">ShieldOdds</th>
+            <th>Polymarket</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Bet Direction</td>
+            <td class="highlight-col"><span class="check">🔒 Encrypted</span> — hidden until settlement</td>
+            <td><span class="cross">👁 Public</span> — visible to everyone on-chain</td>
+          </tr>
+          <tr>
+            <td>Bet Amount</td>
+            <td class="highlight-col">Public and transparent</td>
+            <td>Public and transparent</td>
+          </tr>
+          <tr>
+            <td>Front-running Risk</td>
+            <td class="highlight-col"><span class="check">✓ Eliminated</span> — direction is hidden so no one can front-run your position</td>
+            <td><span class="cross">✗ Exposed</span> — bots can see and front-run large bets</td>
+          </tr>
+          <tr>
+            <td>Position Sniping</td>
+            <td class="highlight-col"><span class="check">✓ Not possible</span> — your choice is only revealed at settlement</td>
+            <td><span class="cross">✗ Vulnerable</span> — traders copy whale positions in real time</td>
+          </tr>
+          <tr>
+            <td>Privacy Technology</td>
+            <td class="highlight-col">Fully Homomorphic Encryption (FHE) via Zama fhEVM</td>
+            <td>None — standard EVM with public state</td>
+          </tr>
+          <tr>
+            <td>Settlement</td>
+            <td class="highlight-col">On-chain via KMS-verified FHE decryption</td>
+            <td>Off-chain oracle (UMA Optimistic Oracle)</td>
+          </tr>
+          <tr>
+            <td>Network</td>
+            <td class="highlight-col">Sepolia (testnet) with FHE coprocessor</td>
+            <td>Polygon (mainnet)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══════ TECHNICAL PROCESS ═══════ -->
+  <section class="technical" id="technical">
+    <div class="section-inner">
+      <div class="section-label"><span>🔍</span> Under the Hood</div>
+      <h2 class="section-title">What's Public, What's Private</h2>
+      <p class="section-desc">
+        At every step, your bet amount stays visible for pool transparency —
+        but your YES/NO direction remains encrypted until settlement.
+      </p>
+      <div class="process-flow">
+        <div class="process-step">
+          <div class="process-step-header">
+            <div class="process-step-num">1</div>
+            <div class="process-step-title">Placing a Bet</div>
+          </div>
+          <div class="process-detail public"><span class="detail-icon">👁</span> Market question &amp; deadline</div>
+          <div class="process-detail public"><span class="detail-icon">👁</span> Your wallet address</div>
+          <div class="process-detail public"><span class="detail-icon">👁</span> ETH bet amount</div>
+          <div class="process-detail encrypted"><span class="detail-icon">🔒</span> YES or NO direction</div>
+        </div>
+        <div class="process-step">
+          <div class="process-step-header">
+            <div class="process-step-num">2</div>
+            <div class="process-step-title">During Market</div>
+          </div>
+          <div class="process-detail public"><span class="detail-icon">👁</span> Total pool size</div>
+          <div class="process-detail public"><span class="detail-icon">👁</span> Number of bets placed</div>
+          <div class="process-detail public"><span class="detail-icon">👁</span> Individual bet amounts</div>
+          <div class="process-detail encrypted"><span class="detail-icon">🔒</span> All bet directions (stored as FHE ciphertext)</div>
+        </div>
+        <div class="process-step">
+          <div class="process-step-header">
+            <div class="process-step-num">3</div>
+            <div class="process-step-title">Settlement</div>
+          </div>
+          <div class="process-detail public"><span class="detail-icon">👁</span> Market outcome (YES/NO)</div>
+          <div class="process-detail public"><span class="detail-icon">👁</span> Payout amounts per winner</div>
+          <div class="process-detail public"><span class="detail-icon">👁</span> Decrypted directions (KMS-verified)</div>
+          <div class="process-detail public"><span class="detail-icon">👁</span> Protocol fee (1%)</div>
+        </div>
+      </div>
+      <div class="process-legend">
+        <div class="legend-item"><div class="legend-swatch pub"></div> Public on-chain</div>
+        <div class="legend-item"><div class="legend-swatch enc"></div> FHE Encrypted</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════ TECH STACK ═══════ -->
+  <section class="tech-stack" id="tech-stack">
+    <div class="section-inner">
+      <div class="section-label"><span>🧬</span> Tech Stack</div>
+      <h2 class="section-title">Built on Proven Infrastructure</h2>
+      <p class="section-desc">Every component is chosen for security, verifiability, and performance.</p>
+      <div class="tech-grid">
+        <div class="tech-item">
+          <div class="tech-icon">🔐</div>
+          <div class="tech-role">Encryption</div>
+          <div class="tech-name">Zama fhEVM</div>
+          <div class="tech-desc">Fully Homomorphic Encryption protocol that enables encrypted computation directly on-chain. Bet directions stay hidden even from the contract itself.</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-icon">⛓️</div>
+          <div class="tech-role">Smart Contracts</div>
+          <div class="tech-name">Solidity + FHEVM</div>
+          <div class="tech-desc">Solidity contracts using Zama's FHE library for encrypted types (euint8), on-chain encryption, KMS decryption proofs, and access control.</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-icon">🧪</div>
+          <div class="tech-role">Network</div>
+          <div class="tech-name">Sepolia Testnet</div>
+          <div class="tech-desc">Deployed on Ethereum's Sepolia testnet with Zama's FHE coprocessor. Free testnet ETH — no real funds at risk during development.</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-icon">🛠️</div>
+          <div class="tech-role">Development</div>
+          <div class="tech-name">Hardhat</div>
+          <div class="tech-desc">Industry-standard Ethereum development framework. Automated testing, deployment scripts, and task-based CLI for market management.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════ LIVE MARKETS ═══════ -->
+  <section class="markets" id="markets">
+    <div class="section-inner">
+      <div class="section-label"><span>📊</span> Live Markets</div>
+      <h2 class="section-title">Active Prediction Markets</h2>
+      <p class="section-desc">
+        Place your bet on any open market. Up to 5 markets shown — all data pulled
+        live from the Sepolia contract.
+      </p>
+      <div class="markets-list" id="marketsList">
+        <div class="markets-empty">
+          <div class="markets-empty-icon">📡</div>
+          <h3>Loading markets…</h3>
+          <p>Connecting to Sepolia to fetch live data.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════ FAQ ═══════ -->
+  <section class="faq" id="faq">
+    <div class="section-divider"></div>
+    <div style="padding-top:100px;"></div>
+    <div class="section-inner">
+      <div class="section-label"><span>❓</span> FAQ</div>
+      <h2 class="section-title">Frequently Asked Questions</h2>
+      <p class="section-desc">Everything you need to know about ShieldOdds.</p>
+      <div class="faq-grid">
+        <div class="faq-item">
+          <div class="faq-q" onclick="toggleFaq(this)">
+            <span>What is FHE and why does it matter?</span>
+            <div class="faq-toggle">+</div>
+          </div>
+          <div class="faq-a"><div class="faq-a-inner">Fully Homomorphic Encryption (FHE) allows computation on encrypted data without ever decrypting it. In ShieldOdds, this means the smart contract processes your bet without knowing whether you chose YES or NO. Your direction stays encrypted on-chain until the market creator resolves the outcome and KMS-verified decryption reveals all positions simultaneously.</div></div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q" onclick="toggleFaq(this)">
+            <span>What exactly is encrypted vs public?</span>
+            <div class="faq-toggle">+</div>
+          </div>
+          <div class="faq-a"><div class="faq-a-inner">Only your bet <strong>direction</strong> (YES or NO) is encrypted. Your bet <strong>amount</strong> (in ETH), wallet address, and the market details are all public on-chain. This gives pool transparency while protecting your position from front-runners and copy-traders.</div></div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q" onclick="toggleFaq(this)">
+            <span>How does this prevent front-running?</span>
+            <div class="faq-toggle">+</div>
+          </div>
+          <div class="faq-a"><div class="faq-a-inner">In traditional prediction markets, everyone can see which side you're betting on. Bots and whales exploit this by front-running large bets — placing their own bets first to move the price. Since ShieldOdds encrypts your direction, no one can see your position to front-run it. The direction is only revealed during settlement, after all bets are locked in.</div></div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q" onclick="toggleFaq(this)">
+            <span>How are payouts calculated?</span>
+            <div class="faq-toggle">+</div>
+          </div>
+          <div class="faq-a"><div class="faq-a-inner">Payouts are pro-rata: your share of the total pool is proportional to your bet relative to all winning bets. A 1% protocol fee is deducted from the pool before distribution. If no one bet on the winning side, all bettors receive a full refund (no fee applied).</div></div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q" onclick="toggleFaq(this)">
+            <span>What network is ShieldOdds on?</span>
+            <div class="faq-toggle">+</div>
+          </div>
+          <div class="faq-a"><div class="faq-a-inner">ShieldOdds is deployed on Ethereum's Sepolia testnet with Zama's FHE coprocessor. This is a testnet deployment — you use free Sepolia ETH, not real funds. You can get testnet ETH from any Sepolia faucet.</div></div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q" onclick="toggleFaq(this)">
+            <span>Who resolves the market outcome?</span>
+            <div class="faq-toggle">+</div>
+          </div>
+          <div class="faq-a"><div class="faq-a-inner">The market creator resolves the outcome by calling the resolve function after the deadline. They set the winning side (YES or NO), then the settlement process decrypts all bet directions using KMS-verified proofs and computes payouts. The creator can also cancel a market before resolution.</div></div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q" onclick="toggleFaq(this)">
+            <span>What wallet do I need?</span>
+            <div class="faq-toggle">+</div>
+          </div>
+          <div class="faq-a"><div class="faq-a-inner">Any Ethereum-compatible wallet that supports Sepolia testnet works — MetaMask, Rabby, or similar. The app will automatically prompt you to switch to Sepolia (chain ID 11155111) when you connect.</div></div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q" onclick="toggleFaq(this)">
+            <span>What is the minimum bet?</span>
+            <div class="faq-toggle">+</div>
+          </div>
+          <div class="faq-a"><div class="faq-a-inner">The minimum bet is 0.001 ETH (Sepolia testnet ETH). Since this is a testnet, the ETH has no real monetary value — you can get it free from Sepolia faucets.</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════ FOOTER ═══════ -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <img src="assets/logo-full.png" alt="ShieldOdds" class="footer-logo" />
+          <p>A privacy-preserving prediction market where your bet direction stays encrypted on-chain via FHE, while bet amounts and market outcomes remain fully public and verifiable.</p>
+        </div>
+        <div class="footer-col">
+          <h4>Product</h4>
+          <a href="#how-it-works">How It Works</a>
+          <a href="#comparison">Compare</a>
+          <a href="#markets">Markets</a>
+          <a href="#faq">FAQ</a>
+        </div>
+        <div class="footer-col">
+          <h4>Developers</h4>
+          <a href="https://github.com/wumpomakeit/shieldodds" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://docs.zama.ai/fhevm" target="_blank" rel="noopener">Docs (Zama fhEVM)</a>
+          <a href="https://sepolia.etherscan.io/address/0xEaD8ff0eA95d0f468a9A6C21bb1aD177e0685ada" target="_blank" rel="noopener">Etherscan</a>
+        </div>
+        <div class="footer-col">
+          <h4>Legal</h4>
+          <a href="#privacy" onclick="showLegal('privacy')">Privacy Policy</a>
+          <a href="#terms" onclick="showLegal('terms')">Terms of Use</a>
+          <a href="#disclaimer" onclick="showLegal('disclaimer')">Disclaimer</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>&copy; 2025 ShieldOdds. All rights reserved.</span>
+        <a href="https://sepolia.etherscan.io/address/0xEaD8ff0eA95d0f468a9A6C21bb1aD177e0685ada" target="_blank" rel="noopener">Sepolia Contract ↗</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ═══════ BET MODAL ═══════ -->
+  <div class="modal-overlay" id="betModal">
+    <div class="modal">
+      <button class="modal-close" onclick="closeBetModal()">✕</button>
+      <h3>Place Your Bet</h3>
+      <div class="modal-question" id="modalQuestion">—</div>
+      <div class="modal-sides">
+        <button class="modal-side" id="modalYes" onclick="selectSide(1)">🛡️ YES</button>
+        <button class="modal-side" id="modalNo" onclick="selectSide(0)">🛡️ NO</button>
+      </div>
+      <div class="modal-input-group">
+        <label>Bet Amount</label>
+        <div class="modal-input-wrap">
+          <input type="number" id="betAmount" placeholder="0.01" min="0.001" step="0.001" />
+          <span class="unit">ETH</span>
+        </div>
+        <div class="modal-min-bet">Minimum: 0.001 ETH</div>
+      </div>
+      <div class="modal-note">
+        <span class="note-icon">🔒</span>
+        <span>Your bet direction (YES/NO) will be encrypted client-side using FHE before being sent to the contract. The bet amount is public.</span>
+      </div>
+      <button class="btn-place-bet" id="btnPlaceBet" onclick="placeBet()" disabled>Select a side to continue</button>
+    </div>
+  </div>
+
+  <!-- ═══════ LEGAL MODAL ═══════ -->
+  <div class="modal-overlay" id="legalModal">
+    <div class="modal" style="max-width:560px;">
+      <button class="modal-close" onclick="document.getElementById('legalModal').classList.remove('active')">✕</button>
+      <h3 id="legalTitle">—</h3>
+      <div id="legalContent" style="font-size:15px;color:var(--slate);line-height:1.7;margin-top:16px;"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- ═══════ FHEVMJS (for FHE encryption) ═══════ -->
+  <script type="module">
+    // Import fhevmjs bundle — sets window.fhevmjs after WASM loads
+    import { initFhevm, createInstance } from 'https://cdn.jsdelivr.net/npm/fhevmjs@0.6.2/bundle.js';
+
+    let fhevmInstance = null;
+
+    async function initFHE() {
+      try {
+        await initFhevm();
+        // Detect local vs production for the RPC URL
+        const isLocal = window.location.protocol === 'file:'
+                     || window.location.hostname === 'localhost'
+                     || window.location.hostname === '127.0.0.1';
+        const rpcForFhe = isLocal
+          ? 'https://ethereum-sepolia-rpc.publicnode.com'
+          : window.location.origin + '/api/rpc';
+
+        fhevmInstance = await createInstance({
+          kmsContractAddress: '0xbE0E383937d564D7FF0BC3b46c51f0bF8d5C311A',
+          aclContractAddress: '0xf0Ffdc93b7E186bC2f8CB3dAA75D86d1930A433D',
+          networkUrl: rpcForFhe,
+          gatewayUrl: 'https://gateway.sepolia.zama.ai/',
+        });
+        console.log('fhEVM initialized ✓');
+      } catch (err) {
+        console.warn('fhEVM init failed (FHE betting may not work):', err);
+      }
+    }
+
+    // Expose to global scope for onclick handlers
+    window.fhevmInstance = null;
+    window.initFHE = initFHE;
+
+    initFHE().then(() => {
+      window.fhevmInstance = fhevmInstance;
+    });
+  </script>
+
+  <script>
+    // ═══════════════════════════════════════════
+    // CONFIG
+    // ═══════════════════════════════════════════
+    const CONTRACT_ADDRESS = '0xEaD8ff0eA95d0f468a9A6C21bb1aD177e0685ada';
+    const SEPOLIA_CHAIN_ID = '0xaa36a7';
+
+    // Use the serverless RPC proxy in production so the Alchemy key
+    // stays server-side. Falls back to public RPC for local dev.
+    const IS_LOCAL = window.location.protocol === 'file:'
+                  || window.location.hostname === 'localhost'
+                  || window.location.hostname === '127.0.0.1';
+    const RPC_URL = IS_LOCAL
+      ? 'https://ethereum-sepolia-rpc.publicnode.com'
+      : window.location.origin + '/api/rpc';
+
+    const CONTRACT_ABI = [
+      'function marketCount() view returns (uint256)',
+      'function getMarket(uint256 marketId) view returns (string question, address creator, uint256 deadline, uint8 status, uint8 outcome, uint256 totalPool, uint256 totalWinningPool, uint256 betCount)',
+      'function MIN_BET() view returns (uint256)',
+      'function owner() view returns (address)',
+      'function placeBet(uint256 marketId, bytes32 encryptedSide, bytes inputProof) payable',
+      'function withdraw(uint256 marketId)',
+      'function payouts(uint256 marketId, address user) view returns (uint256)',
+    ];
+
+    const STATUS_LABELS = ['Open', 'Resolved', 'Settled', 'Cancelled'];
+    const STATUS_CLASSES = ['open', 'resolved', 'settled', 'cancelled'];
+
+    // ═══════════════════════════════════════════
+    // STATE
+    // ═══════════════════════════════════════════
+    let provider = null;
+    let signer = null;
+    let userAddress = null;
+    let contract = null;
+    let heroMarketId = null;
+
+    // Modal state
+    let modalMarketId = null;
+    let modalSide = null;
+
+    // Pass explicit network to skip auto-detection (avoids NETWORK_ERROR on load)
+    const readProvider = new ethers.providers.JsonRpcProvider(RPC_URL, {
+      chainId: 11155111,
+      name: 'sepolia',
+    });
+    const readContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, readProvider);
+
+    // ═══════════════════════════════════════════
+    // WALLET
+    // ═══════════════════════════════════════════
+    async function connectWallet() {
+      if (!window.ethereum) {
+        showToast('Please install MetaMask or a compatible wallet', true);
+        return;
+      }
+      try {
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+        if (chainId !== SEPOLIA_CHAIN_ID) {
+          try {
+            await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: SEPOLIA_CHAIN_ID }] });
+          } catch (switchError) {
+            if (switchError.code === 4902) {
+              await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [{ chainId: SEPOLIA_CHAIN_ID, chainName: 'Sepolia Testnet', nativeCurrency: { name: 'SepoliaETH', symbol: 'ETH', decimals: 18 }, rpcUrls: ['https://ethereum-sepolia-rpc.publicnode.com'], blockExplorerUrls: ['https://sepolia.etherscan.io'] }],
+              });
+            } else throw switchError;
+          }
+        }
+        provider = new ethers.providers.Web3Provider(window.ethereum);
+        signer = provider.getSigner();
+        userAddress = accounts[0];
+        contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+        const btn = document.getElementById('connectBtn');
+        btn.classList.add('connected');
+        document.getElementById('connectText').textContent = userAddress.slice(0, 6) + '…' + userAddress.slice(-4);
+        showToast('Connected to Sepolia ✓');
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to connect wallet', true);
+      }
+    }
+
+    if (window.ethereum) {
+      window.ethereum.on('accountsChanged', (accounts) => {
+        if (accounts.length === 0) {
+          document.getElementById('connectBtn').classList.remove('connected');
+          document.getElementById('connectText').textContent = 'Connect Wallet';
+          userAddress = null;
+        } else {
+          userAddress = accounts[0];
+          document.getElementById('connectText').textContent = userAddress.slice(0, 6) + '…' + userAddress.slice(-4);
+        }
+      });
+      window.ethereum.on('chainChanged', () => window.location.reload());
+    }
+
+    // ═══════════════════════════════════════════
+    // LOAD MARKETS
+    // ═══════════════════════════════════════════
+    function formatPool(wei) {
+      const eth = parseFloat(ethers.utils.formatEther(wei));
+      return eth.toFixed(eth < 0.01 && eth > 0 ? 4 : eth < 1 ? 3 : 2) + ' ETH';
+    }
+
+    function formatDeadline(ts) {
+      const deadline = new Date(ts * 1000);
+      const now = new Date();
+      if (deadline <= now) return 'Ended';
+      const diff = deadline - now;
+      const days = Math.floor(diff / 86400000);
+      const hours = Math.floor((diff % 86400000) / 3600000);
+      if (days > 0) return days + 'd ' + hours + 'h';
+      const mins = Math.floor((diff % 3600000) / 60000);
+      return hours > 0 ? hours + 'h ' + mins + 'm' : mins + 'm';
+    }
+
+    async function loadHeroMarket() {
+      try {
+        const count = await readContract.marketCount();
+        const total = count.toNumber();
+        if (total === 0) {
+          document.getElementById('heroQuestion').textContent = 'No markets yet — be the first to create one!';
+          document.getElementById('heroStatusText').textContent = 'Empty';
+          heroMarketId = null;
+          return;
+        }
+        heroMarketId = total - 1;
+        const m = await readContract.getMarket(heroMarketId);
+        document.getElementById('heroQuestion').textContent = m.question;
+        document.getElementById('heroStatusText').textContent = STATUS_LABELS[m.status];
+        const statusEl = document.getElementById('heroStatus');
+        if (m.status === 0) { statusEl.style.color = '#4CAF50'; statusEl.style.background = '#E8F5E9'; }
+        else if (m.status === 1) { statusEl.style.color = '#E8873A'; statusEl.style.background = '#FFF3E0'; }
+        else if (m.status === 3) { statusEl.style.color = '#E53935'; statusEl.style.background = '#FFEBEE'; }
+        else { statusEl.style.color = '#6B6B6B'; statusEl.style.background = '#F5F5F5'; }
+        document.getElementById('heroPool').textContent = formatPool(m.totalPool);
+        document.getElementById('heroBets').textContent = m.betCount.toString();
+        document.getElementById('heroDeadline').textContent = formatDeadline(m.deadline.toNumber());
+
+        // Update hero card buttons based on market status
+        const sidesEl = document.getElementById('heroCardSides');
+        const isOpen = m.status === 0 && new Date(m.deadline.toNumber() * 1000) > new Date();
+        const isClaimable = m.status === 2 || m.status === 3;
+
+        if (isOpen) {
+          sidesEl.innerHTML = `
+            <button class="side-btn side-yes" onclick="openBetModal(heroMarketId, 1)">🛡️ YES</button>
+            <button class="side-btn side-no" onclick="openBetModal(heroMarketId, 0)">🛡️ NO</button>
+          `;
+        } else if (isClaimable && userAddress) {
+          try {
+            const payout = await readContract.payouts(heroMarketId, userAddress);
+            if (!payout.isZero()) {
+              sidesEl.innerHTML = `
+                <button class="btn-claim" style="width:100%;justify-content:center;padding:14px 24px;font-size:16px;" onclick="claimWinnings(${heroMarketId})">
+                  💰 Claim ${ethers.utils.formatEther(payout)} ETH
+                </button>
+              `;
+            } else {
+              sidesEl.innerHTML = `<span style="color:var(--slate);font-size:14px;">${m.status === 2 ? 'Market settled — ' + (m.outcome === 1 ? 'YES' : 'NO') + ' won' : 'Market cancelled'}</span>`;
+            }
+          } catch(_) {
+            sidesEl.innerHTML = `<span style="color:var(--slate);font-size:14px;">${STATUS_LABELS[m.status]}</span>`;
+          }
+        } else if (!isOpen && m.status === 0) {
+          sidesEl.innerHTML = `<span style="color:var(--slate);font-size:14px;">⏰ Betting period ended — awaiting resolution</span>`;
+        } else {
+          sidesEl.innerHTML = `<span style="color:var(--slate);font-size:14px;">${STATUS_LABELS[m.status]}</span>`;
+        }
+      } catch (err) {
+        console.error(err);
+        document.getElementById('heroQuestion').textContent = 'Connect to Sepolia to view markets';
+        document.getElementById('heroStatusText').textContent = 'Offline';
+      }
+    }
+
+    async function loadMarketsList() {
+      const container = document.getElementById('marketsList');
+      try {
+        const count = await readContract.marketCount();
+        const total = count.toNumber();
+        if (total === 0) {
+          container.innerHTML = '<div class="markets-empty"><div class="markets-empty-icon">🏜️</div><h3>No Markets Yet</h3><p>Create the first prediction market using the Hardhat CLI.</p></div>';
+          return;
+        }
+        const limit = Math.min(total, 5);
+        let html = '';
+        for (let i = total - 1; i >= Math.max(0, total - limit); i--) {
+          const m = await readContract.getMarket(i);
+          const isOpen = m.status === 0 && new Date(m.deadline.toNumber() * 1000) > new Date();
+          const isClaimable = m.status === 2 || m.status === 3; // Settled or Cancelled
+
+          // Check if connected user has pending payout
+          let userPayout = ethers.BigNumber.from(0);
+          if (isClaimable && userAddress) {
+            try { userPayout = await readContract.payouts(i, userAddress); } catch(_){}
+          }
+          const hasPayout = !userPayout.isZero();
+
+          html += `
+            <div class="market-card">
+              <div class="market-info">
+                <div class="market-meta">
+                  <span class="market-id">#${i}</span>
+                  <span class="market-status-badge ${STATUS_CLASSES[m.status]}">${STATUS_LABELS[m.status]}</span>
+                  ${m.status === 2 ? `<span class="market-outcome-badge">${m.outcome === 1 ? '✅ YES' : '❌ NO'} won</span>` : ''}
+                </div>
+                <div class="market-question">${escapeHtml(m.question)}</div>
+                <div class="market-stats">
+                  <div class="market-stat">💰 <strong>${formatPool(m.totalPool)}</strong> pool</div>
+                  <div class="market-stat">🎯 <strong>${m.betCount}</strong> bets</div>
+                  <div class="market-stat">⏰ ${formatDeadline(m.deadline.toNumber())}</div>
+                </div>
+              </div>
+              <div class="market-actions">
+                ${isOpen ? `
+                  <button class="btn-bet" onclick="openBetModal(${i})">🛡️ View & Bet</button>
+                ` : hasPayout ? `
+                  <button class="btn-claim" onclick="claimWinnings(${i})">
+                    💰 Claim ${ethers.utils.formatEther(userPayout)} ETH
+                  </button>
+                ` : `
+                  <button class="btn-bet" disabled>
+                    ${m.status === 0 ? '⏰ Ended' : STATUS_LABELS[m.status]}
+                  </button>
+                `}
+              </div>
+            </div>
+          `;
+        }
+        container.innerHTML = html;
+      } catch (err) {
+        console.error(err);
+        container.innerHTML = '<div class="markets-empty"><div class="markets-empty-icon">⚠️</div><h3>Connection Error</h3><p>Could not connect to Sepolia. Please try again later.</p></div>';
+      }
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // ═══════════════════════════════════════════
+    // BET MODAL
+    // ═══════════════════════════════════════════
+    async function openBetModal(marketId, preselectedSide) {
+      modalMarketId = marketId;
+      modalSide = preselectedSide ?? null;
+      const m = await readContract.getMarket(marketId);
+      document.getElementById('modalQuestion').textContent = m.question;
+      document.getElementById('betAmount').value = '';
+
+      // Reset side selection
+      document.getElementById('modalYes').className = 'modal-side';
+      document.getElementById('modalNo').className = 'modal-side';
+      if (modalSide === 1) document.getElementById('modalYes').className = 'modal-side selected-yes';
+      if (modalSide === 0) document.getElementById('modalNo').className = 'modal-side selected-no';
+
+      updatePlaceBetBtn();
+      document.getElementById('betModal').classList.add('active');
+    }
+
+    function closeBetModal() {
+      document.getElementById('betModal').classList.remove('active');
+      modalMarketId = null;
+      modalSide = null;
+    }
+
+    function selectSide(side) {
+      modalSide = side;
+      document.getElementById('modalYes').className = side === 1 ? 'modal-side selected-yes' : 'modal-side';
+      document.getElementById('modalNo').className = side === 0 ? 'modal-side selected-no' : 'modal-side';
+      updatePlaceBetBtn();
+    }
+
+    function updatePlaceBetBtn() {
+      const btn = document.getElementById('btnPlaceBet');
+      if (modalSide === null) {
+        btn.disabled = true;
+        btn.textContent = 'Select a side to continue';
+      } else if (!userAddress) {
+        btn.disabled = true;
+        btn.textContent = 'Connect wallet first';
+      } else {
+        btn.disabled = false;
+        btn.textContent = modalSide === 1 ? '🛡️ Encrypt & Bet YES' : '🛡️ Encrypt & Bet NO';
+      }
+    }
+
+    // Listen for input changes
+    document.getElementById('betAmount').addEventListener('input', updatePlaceBetBtn);
+
+    async function placeBet() {
+      if (modalSide === null || modalMarketId === null) return;
+      if (!userAddress || !contract) {
+        showToast('Please connect your wallet first', true);
+        return;
+      }
+
+      const amountStr = document.getElementById('betAmount').value;
+      const amount = parseFloat(amountStr);
+      if (!amount || amount < 0.001) {
+        showToast('Minimum bet is 0.001 ETH', true);
+        return;
+      }
+
+      const btn = document.getElementById('btnPlaceBet');
+      btn.disabled = true;
+      btn.textContent = '⏳ Encrypting bet direction…';
+
+      try {
+        // Encrypt the bet side using fhevmjs
+        const fheInstance = window.fhevmInstance;
+        if (!fheInstance) {
+          showToast('FHE not initialized. Please wait a moment and try again.', true);
+          btn.disabled = false;
+          updatePlaceBetBtn();
+          return;
+        }
+
+        const input = fheInstance.createEncryptedInput(CONTRACT_ADDRESS, userAddress);
+        input.add8(modalSide); // 0 = NO, 1 = YES
+        const encrypted = await input.encrypt();
+
+        // encrypted.handles[0] is Uint8Array, encrypted.inputProof is Uint8Array
+        const handle = '0x' + Array.from(encrypted.handles[0]).map(b => b.toString(16).padStart(2, '0')).join('');
+        const proof = '0x' + Array.from(encrypted.inputProof).map(b => b.toString(16).padStart(2, '0')).join('');
+
+        btn.textContent = '⏳ Sending transaction…';
+
+        const tx = await contract.placeBet(
+          modalMarketId,
+          handle,
+          proof,
+          { value: ethers.utils.parseEther(amountStr) }
+        );
+
+        btn.textContent = '⏳ Confirming…';
+        await tx.wait();
+
+        showToast('Bet placed successfully! 🎉');
+        closeBetModal();
+
+        // Refresh data
+        loadHeroMarket();
+        loadMarketsList();
+      } catch (err) {
+        console.error('placeBet error:', err);
+        const reason = err.reason || err.message || 'Transaction failed';
+        showToast(reason.length > 80 ? reason.slice(0, 80) + '…' : reason, true);
+      } finally {
+        btn.disabled = false;
+        updatePlaceBetBtn();
+      }
+    }
+
+    // ═══════════════════════════════════════════
+    // CLAIM WINNINGS (withdraw)
+    // ═══════════════════════════════════════════
+    async function claimWinnings(marketId) {
+      if (!contract) {
+        showToast('Connect your wallet first', true);
+        return;
+      }
+      const btn = event.target.closest('button');
+      const originalText = btn.innerHTML;
+      try {
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Claiming…';
+        const tx = await contract.withdraw(marketId);
+        showToast('Transaction submitted — waiting for confirmation…');
+        await tx.wait();
+        showToast('🎉 Winnings claimed successfully!');
+        loadHeroMarket();
+        loadMarketsList();
+      } catch (err) {
+        console.error('withdraw error:', err);
+        const reason = err.reason || err.data?.message || err.message || 'Transaction failed';
+        showToast(reason.length > 80 ? reason.slice(0, 80) + '…' : reason, true);
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+      }
+    }
+
+    // ═══════════════════════════════════════════
+    // FAQ TOGGLE
+    // ═══════════════════════════════════════════
+    function toggleFaq(el) {
+      const item = el.closest('.faq-item');
+      item.classList.toggle('open');
+    }
+
+    // ═══════════════════════════════════════════
+    // LEGAL MODALS
+    // ═══════════════════════════════════════════
+    const legalContent = {
+      privacy: {
+        title: 'Privacy Policy',
+        body: 'ShieldOdds does not collect, store, or process personal data. All interactions occur directly between your wallet and the smart contract on the Sepolia testnet. No cookies, analytics, or tracking scripts are used on this site.'
+      },
+      terms: {
+        title: 'Terms of Use',
+        body: 'ShieldOdds is a testnet application provided as-is for experimental and educational purposes. By using this application, you acknowledge that you are interacting with smart contracts on the Sepolia testnet using testnet ETH with no real monetary value. Use at your own risk.'
+      },
+      disclaimer: {
+        title: 'Disclaimer',
+        body: 'This is an experimental testnet application. The smart contracts have not been audited. No real funds are at risk — ShieldOdds operates exclusively on Sepolia testnet ETH. The developers assume no liability for any losses or issues arising from use of this application.'
+      }
+    };
+
+    function showLegal(key) {
+      event.preventDefault();
+      const data = legalContent[key];
+      document.getElementById('legalTitle').textContent = data.title;
+      document.getElementById('legalContent').textContent = data.body;
+      document.getElementById('legalModal').classList.add('active');
+    }
+
+    // ═══════════════════════════════════════════
+    // TOAST
+    // ═══════════════════════════════════════════
+    function showToast(msg, isError = false) {
+      const toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.className = 'toast show' + (isError ? ' error' : '');
+      setTimeout(() => { toast.className = 'toast'; }, 4000);
+    }
+
+    // ═══════════════════════════════════════════
+    // CLOSE MODALS ON OVERLAY CLICK
+    // ═══════════════════════════════════════════
+    document.getElementById('betModal').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) closeBetModal();
+    });
+    document.getElementById('legalModal').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) e.currentTarget.classList.remove('active');
+    });
+
+    // ═══════════════════════════════════════════
+    // NAVBAR HIDE-ON-SCROLL
+    // ═══════════════════════════════════════════
+    (function() {
+      const wrap = document.getElementById('navbarWrap');
+      let lastY = 0;
+      const THRESHOLD = 10;
+      window.addEventListener('scroll', () => {
+        const y = window.scrollY;
+        if (y > lastY + THRESHOLD && y > 140) {
+          wrap.classList.add('nav-hidden');
+        } else if (y < lastY - THRESHOLD || y <= 80) {
+          wrap.classList.remove('nav-hidden');
+        }
+        lastY = y;
+      }, { passive: true });
+    })();
+
+    // INIT
+    // ═══════════════════════════════════════════
+    document.addEventListener('DOMContentLoaded', () => {
+      loadHeroMarket();
+      loadMarketsList();
+      if (window.ethereum) {
+        window.ethereum.request({ method: 'eth_accounts' }).then(accounts => {
+          if (accounts.length > 0) connectWallet();
+        });
+      }
+    });
+  </script>
+</body>
+</html>

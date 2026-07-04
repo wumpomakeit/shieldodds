@@ -1,0 +1,9 @@
+{
+  "installCommand": "echo 'No dependencies needed'",
+  "buildCommand": "",
+  "framework": null,
+  "rewrites": [
+    { "source": "/", "destination": "/frontend/index.html" },
+    { "source": "/assets/:path*", "destination": "/frontend/assets/:path*" }
+  ]
+}
