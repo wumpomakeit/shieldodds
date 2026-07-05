@@ -918,6 +918,108 @@
     }
 
     /* ═══════════════════════════════════════════
+       BALANCE BAR
+    ═══════════════════════════════════════════ */
+    .balance-section {
+      padding: 0 clamp(16px, 4vw, 48px);
+      background: var(--cream);
+    }
+
+    .balance-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      background: linear-gradient(135deg, #FFF3E0 0%, #FFF8F0 100%);
+      border: 1px solid var(--sand);
+      border-radius: var(--radius);
+      padding: 20px 28px;
+      flex-wrap: wrap;
+    }
+
+    .balance-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .balance-label {
+      font-weight: 600;
+      color: var(--charcoal);
+      font-size: 15px;
+    }
+
+    .balance-value {
+      font-family: 'Fraunces', serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--amber-dark);
+    }
+
+    .balance-note {
+      font-size: 12px;
+      color: var(--slate);
+    }
+
+    .balance-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .deposit-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      border: 1px solid var(--sand);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      background: white;
+    }
+
+    .deposit-input {
+      border: none;
+      outline: none;
+      padding: 10px 14px;
+      font-size: 14px;
+      width: 90px;
+      font-family: 'Inter', sans-serif;
+      background: transparent;
+    }
+
+    .btn-deposit {
+      border: none;
+      background: var(--amber);
+      color: white;
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.2s;
+    }
+
+    .btn-deposit:hover { background: var(--amber-dark); }
+    .btn-deposit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-withdraw-balance {
+      border: 1px solid var(--sand);
+      background: white;
+      color: var(--charcoal);
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border-radius: var(--radius-sm);
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn-withdraw-balance:hover { border-color: var(--amber); color: var(--amber); }
+
+    /* ═══════════════════════════════════════════
        LIVE MARKETS
     ═══════════════════════════════════════════ */
     .markets {
@@ -1525,6 +1627,12 @@
       .contract-bar { flex-direction: column; gap: 6px; font-size: 11px; }
       .contract-bar .sep { display: none; }
       .comparison-table { display: block; overflow-x: auto; }
+      .balance-bar { flex-direction: column; align-items: stretch; gap: 14px; }
+      .balance-info { flex-direction: column; gap: 6px; }
+      .balance-actions { flex-direction: column; }
+      .deposit-wrap { width: 100%; }
+      .deposit-input { flex: 1; }
+      .btn-withdraw-balance { width: 100%; text-align: center; }
     }
   </style>
 </head>
@@ -1573,7 +1681,7 @@
         <h1>Place Your Prediction<br/><span class="highlight">Quietly.</span></h1>
         <p class="hero-subtitle">
           ShieldOdds is a privacy-preserving prediction market where your bet
-          direction stays encrypted on-chain via FHE, while bet amounts and
+          amount stays encrypted on-chain via FHE, while bet directions and
           market outcomes remain fully public and verifiable.
         </p>
         <div class="hero-actions">
@@ -1589,7 +1697,7 @@
           </div>
           <div class="hero-card-question" id="heroQuestion">Loading market data…</div>
           <div class="hero-card-stats">
-            <div class="stat-item"><div class="stat-label">Pool</div><div class="stat-value" id="heroPool">—</div></div>
+            <div class="stat-item"><div class="stat-label">Bets</div><div class="stat-value" id="heroPool">—</div></div>
             <div class="stat-item"><div class="stat-label">Bets</div><div class="stat-value" id="heroBets">—</div></div>
             <div class="stat-item"><div class="stat-label">Ends</div><div class="stat-value" id="heroDeadline">—</div></div>
           </div>
@@ -1599,10 +1707,10 @@
           </div>
           <div class="hero-card-footer">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            <span>Your bet direction is encrypted — amounts stay public</span>
+            <span>Your bet amount is encrypted — directions stay public</span>
           </div>
         </div>
-        <div class="float-badge float-badge-1">🔐 Encrypted Bets</div>
+        <div class="float-badge float-badge-1">🔐 Hidden Bet Sizes</div>
         <div class="float-badge float-badge-2">⚡ Sepolia Live</div>
         <div class="float-badge float-badge-3">✓ FHE Verified</div>
       </div>
@@ -1617,27 +1725,27 @@
       <div class="section-label"><span>⚙️</span> How It Works</div>
       <h2 class="section-title">Four Steps to<br/>Confidential Predictions</h2>
       <p class="section-desc">
-        ShieldOdds uses Fully Homomorphic Encryption (FHE) so no one — not even the
-        contract — can see which side you chose until settlement. Your bet amount stays
-        public for transparency; only the direction is shielded.
+        ShieldOdds uses Fully Homomorphic Encryption (FHE) so no one can see how much
+        you bet until settlement. Your bet direction (YES/NO) is public; only the
+        bet size is shielded — preventing whale tracking and size-based front-running.
       </p>
       <div class="steps-grid">
         <div class="step-card">
-          <div class="step-number">1<span class="step-icon">📝</span></div>
-          <div class="step-title">Create a Market</div>
-          <div class="step-desc">Anyone can create a prediction market by setting a question and a deadline. Markets are open for bets until the deadline passes.</div>
-          <span class="step-highlight">Permissionless</span>
+          <div class="step-number">1<span class="step-icon">💳</span></div>
+          <div class="step-title">Deposit ETH</div>
+          <div class="step-desc">Send ETH to the contract to fund your encrypted internal balance. Deposit amounts are visible, but your balance becomes encrypted on-chain.</div>
+          <span class="step-highlight">Encrypted Balance</span>
         </div>
         <div class="step-card">
           <div class="step-number">2<span class="step-icon">🔐</span></div>
-          <div class="step-title">Place Encrypted Bets</div>
-          <div class="step-desc">Choose YES or NO — your direction is encrypted client-side before hitting the chain. Send ETH as your wager. The amount is public; your choice stays hidden.</div>
-          <span class="step-highlight">Direction Encrypted</span>
+          <div class="step-title">Place Hidden-Size Bets</div>
+          <div class="step-desc">Pick YES or NO publicly, but your bet amount is encrypted client-side via FHE before hitting the chain. No one can see your bet size.</div>
+          <span class="step-highlight">Amount Encrypted</span>
         </div>
         <div class="step-card">
           <div class="step-number">3<span class="step-icon">⚖️</span></div>
           <div class="step-title">Resolve &amp; Settle</div>
-          <div class="step-desc">After the deadline, the creator resolves the outcome. The KMS decrypts all bet directions with proof, and the contract computes pro-rata payouts.</div>
+          <div class="step-desc">After the deadline, the creator resolves the outcome. The KMS decrypts all bet amounts with proof, and the contract computes pro-rata payouts.</div>
           <span class="step-highlight">KMS Verified</span>
         </div>
         <div class="step-card">
@@ -1657,7 +1765,7 @@
       <h2 class="section-title">ShieldOdds vs Polymarket</h2>
       <p class="section-desc">
         Traditional prediction markets expose every bet to the public.
-        ShieldOdds changes the game with FHE-encrypted bet directions.
+        ShieldOdds changes the game with FHE-encrypted bet amounts — preventing whale tracking and size-based front-running.
       </p>
       <table class="comparison-table">
         <thead>
@@ -1669,24 +1777,24 @@
         </thead>
         <tbody>
           <tr>
-            <td>Bet Direction</td>
+            <td>Bet Amount</td>
             <td class="highlight-col"><span class="check">🔒 Encrypted</span> — hidden until settlement</td>
             <td><span class="cross">👁 Public</span> — visible to everyone on-chain</td>
           </tr>
           <tr>
-            <td>Bet Amount</td>
-            <td class="highlight-col">Public and transparent</td>
+            <td>Bet Direction</td>
+            <td class="highlight-col">Public and transparent (YES/NO)</td>
             <td>Public and transparent</td>
           </tr>
           <tr>
-            <td>Front-running Risk</td>
-            <td class="highlight-col"><span class="check">✓ Eliminated</span> — direction is hidden so no one can front-run your position</td>
-            <td><span class="cross">✗ Exposed</span> — bots can see and front-run large bets</td>
+            <td>Whale Tracking</td>
+            <td class="highlight-col"><span class="check">✓ Prevented</span> — bet sizes are encrypted, no one can identify whale positions</td>
+            <td><span class="cross">✗ Exposed</span> — large bets are visible and easily tracked</td>
           </tr>
           <tr>
-            <td>Position Sniping</td>
-            <td class="highlight-col"><span class="check">✓ Not possible</span> — your choice is only revealed at settlement</td>
-            <td><span class="cross">✗ Vulnerable</span> — traders copy whale positions in real time</td>
+            <td>Size-based Front-running</td>
+            <td class="highlight-col"><span class="check">✓ Eliminated</span> — bet amounts are hidden so bots can't front-run large bets</td>
+            <td><span class="cross">✗ Vulnerable</span> — bots detect and front-run large orders in real time</td>
           </tr>
           <tr>
             <td>Privacy Technology</td>
@@ -1714,29 +1822,29 @@
       <div class="section-label"><span>🔍</span> Under the Hood</div>
       <h2 class="section-title">What's Public, What's Private</h2>
       <p class="section-desc">
-        At every step, your bet amount stays visible for pool transparency —
-        but your YES/NO direction remains encrypted until settlement.
+        Your bet direction (YES/NO) is public for transparency —
+        but your bet amount stays encrypted until settlement, preventing whale tracking.
       </p>
       <div class="process-flow">
         <div class="process-step">
           <div class="process-step-header">
             <div class="process-step-num">1</div>
-            <div class="process-step-title">Placing a Bet</div>
+            <div class="process-step-title">Depositing &amp; Betting</div>
           </div>
-          <div class="process-detail public"><span class="detail-icon">👁</span> Market question &amp; deadline</div>
+          <div class="process-detail public"><span class="detail-icon">👁</span> ETH deposit amount</div>
           <div class="process-detail public"><span class="detail-icon">👁</span> Your wallet address</div>
-          <div class="process-detail public"><span class="detail-icon">👁</span> ETH bet amount</div>
-          <div class="process-detail encrypted"><span class="detail-icon">🔒</span> YES or NO direction</div>
+          <div class="process-detail public"><span class="detail-icon">👁</span> YES or NO direction</div>
+          <div class="process-detail encrypted"><span class="detail-icon">🔒</span> Bet amount (encrypted via FHE)</div>
         </div>
         <div class="process-step">
           <div class="process-step-header">
             <div class="process-step-num">2</div>
             <div class="process-step-title">During Market</div>
           </div>
-          <div class="process-detail public"><span class="detail-icon">👁</span> Total pool size</div>
           <div class="process-detail public"><span class="detail-icon">👁</span> Number of bets placed</div>
-          <div class="process-detail public"><span class="detail-icon">👁</span> Individual bet amounts</div>
-          <div class="process-detail encrypted"><span class="detail-icon">🔒</span> All bet directions (stored as FHE ciphertext)</div>
+          <div class="process-detail public"><span class="detail-icon">👁</span> Bet directions (YES/NO per bet)</div>
+          <div class="process-detail encrypted"><span class="detail-icon">🔒</span> Individual bet amounts (FHE ciphertext)</div>
+          <div class="process-detail encrypted"><span class="detail-icon">🔒</span> Total pool size (encrypted sum)</div>
         </div>
         <div class="process-step">
           <div class="process-step-header">
@@ -1744,8 +1852,8 @@
             <div class="process-step-title">Settlement</div>
           </div>
           <div class="process-detail public"><span class="detail-icon">👁</span> Market outcome (YES/NO)</div>
+          <div class="process-detail public"><span class="detail-icon">👁</span> Decrypted bet amounts (KMS-verified)</div>
           <div class="process-detail public"><span class="detail-icon">👁</span> Payout amounts per winner</div>
-          <div class="process-detail public"><span class="detail-icon">👁</span> Decrypted directions (KMS-verified)</div>
           <div class="process-detail public"><span class="detail-icon">👁</span> Protocol fee (1%)</div>
         </div>
       </div>
@@ -1767,13 +1875,13 @@
           <div class="tech-icon">🔐</div>
           <div class="tech-role">Encryption</div>
           <div class="tech-name">Zama fhEVM</div>
-          <div class="tech-desc">Fully Homomorphic Encryption protocol that enables encrypted computation directly on-chain. Bet directions stay hidden even from the contract itself.</div>
+          <div class="tech-desc">Fully Homomorphic Encryption protocol that enables encrypted computation directly on-chain. Bet amounts stay hidden even from the contract itself.</div>
         </div>
         <div class="tech-item">
           <div class="tech-icon">⛓️</div>
           <div class="tech-role">Smart Contracts</div>
           <div class="tech-name">Solidity + FHEVM</div>
-          <div class="tech-desc">Solidity contracts using Zama's FHE library for encrypted types (euint8), on-chain encryption, KMS decryption proofs, and access control.</div>
+          <div class="tech-desc">Solidity contracts using Zama's FHE library for encrypted types (euint64), on-chain encryption, KMS decryption proofs, and access control.</div>
         </div>
         <div class="tech-item">
           <div class="tech-icon">🧪</div>
@@ -1791,14 +1899,34 @@
     </div>
   </section>
 
+  <!-- ═══════ DEPOSIT / BALANCE BAR ═══════ -->
+  <section class="balance-section" id="balance-section" style="display:none;">
+    <div class="section-inner">
+      <div class="balance-bar">
+        <div class="balance-info">
+          <span class="balance-label">🔐 Your Encrypted Balance</span>
+          <span class="balance-value" id="balanceDisplay">—</span>
+          <span class="balance-note">(tracked locally from deposits &amp; bets)</span>
+        </div>
+        <div class="balance-actions">
+          <div class="deposit-wrap">
+            <input type="number" id="depositAmount" placeholder="0.1" min="0.001" step="0.001" class="deposit-input" />
+            <button class="btn-deposit" onclick="depositETH()">💳 Deposit ETH</button>
+          </div>
+          <button class="btn-withdraw-balance" onclick="withdrawBalance()">↩ Withdraw</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ═══════ LIVE MARKETS ═══════ -->
   <section class="markets" id="markets">
     <div class="section-inner">
       <div class="section-label"><span>📊</span> Live Markets</div>
       <h2 class="section-title">Active Prediction Markets</h2>
       <p class="section-desc">
-        Place your bet on any open market. Up to 5 markets shown — all data pulled
-        live from the Sepolia contract.
+        Deposit ETH to fund your encrypted balance, then place bets on any open market.
+        Bet amounts are encrypted — only the direction is visible.
       </p>
       <div class="markets-list" id="marketsList">
         <div class="markets-empty">
@@ -1824,21 +1952,21 @@
             <span>What is FHE and why does it matter?</span>
             <div class="faq-toggle">+</div>
           </div>
-          <div class="faq-a"><div class="faq-a-inner">Fully Homomorphic Encryption (FHE) allows computation on encrypted data without ever decrypting it. In ShieldOdds, this means the smart contract processes your bet without knowing whether you chose YES or NO. Your direction stays encrypted on-chain until the market creator resolves the outcome and KMS-verified decryption reveals all positions simultaneously.</div></div>
+          <div class="faq-a"><div class="faq-a-inner">Fully Homomorphic Encryption (FHE) allows computation on encrypted data without ever decrypting it. In ShieldOdds, this means the smart contract processes your bet without knowing how much you wagered. Your bet amount stays encrypted on-chain until the market is settled and KMS-verified decryption reveals all amounts simultaneously for payout calculation.</div></div>
         </div>
         <div class="faq-item">
           <div class="faq-q" onclick="toggleFaq(this)">
             <span>What exactly is encrypted vs public?</span>
             <div class="faq-toggle">+</div>
           </div>
-          <div class="faq-a"><div class="faq-a-inner">Only your bet <strong>direction</strong> (YES or NO) is encrypted. Your bet <strong>amount</strong> (in ETH), wallet address, and the market details are all public on-chain. This gives pool transparency while protecting your position from front-runners and copy-traders.</div></div>
+          <div class="faq-a"><div class="faq-a-inner">Only your bet <strong>amount</strong> is encrypted. Your bet <strong>direction</strong> (YES or NO), wallet address, and the market details are all public on-chain. This prevents whale tracking and size-based front-running while keeping bet directions transparent. At settlement, bet amounts are decrypted for payout calculation.</div></div>
         </div>
         <div class="faq-item">
           <div class="faq-q" onclick="toggleFaq(this)">
             <span>How does this prevent front-running?</span>
             <div class="faq-toggle">+</div>
           </div>
-          <div class="faq-a"><div class="faq-a-inner">In traditional prediction markets, everyone can see which side you're betting on. Bots and whales exploit this by front-running large bets — placing their own bets first to move the price. Since ShieldOdds encrypts your direction, no one can see your position to front-run it. The direction is only revealed during settlement, after all bets are locked in.</div></div>
+          <div class="faq-a"><div class="faq-a-inner">In traditional prediction markets, everyone can see how much you're betting. Bots and whales exploit this by front-running large bets — placing their own bets first to manipulate the odds. Since ShieldOdds encrypts your bet amount, no one can identify large positions to front-run. Bet sizes are only revealed during settlement, after all bets are locked in.</div></div>
         </div>
         <div class="faq-item">
           <div class="faq-q" onclick="toggleFaq(this)">
@@ -1859,7 +1987,7 @@
             <span>Who resolves the market outcome?</span>
             <div class="faq-toggle">+</div>
           </div>
-          <div class="faq-a"><div class="faq-a-inner">The market creator resolves the outcome by calling the resolve function after the deadline. They set the winning side (YES or NO), then the settlement process decrypts all bet directions using KMS-verified proofs and computes payouts. The creator can also cancel a market before resolution.</div></div>
+          <div class="faq-a"><div class="faq-a-inner">The market creator resolves the outcome by calling the resolve function after the deadline. They set the winning side (YES or NO), then the settlement process decrypts all bet amounts using KMS-verified proofs and computes pro-rata payouts. The creator can also cancel a market before resolution.</div></div>
         </div>
         <div class="faq-item">
           <div class="faq-q" onclick="toggleFaq(this)">
@@ -1873,7 +2001,7 @@
             <span>What is the minimum bet?</span>
             <div class="faq-toggle">+</div>
           </div>
-          <div class="faq-a"><div class="faq-a-inner">The minimum bet is 0.001 ETH (Sepolia testnet ETH). Since this is a testnet, the ETH has no real monetary value — you can get it free from Sepolia faucets.</div></div>
+          <div class="faq-a"><div class="faq-a-inner">The minimum bet is 0.001 ETH (enforced in the frontend). First deposit ETH to create your encrypted on-chain balance, then place bets from that balance. Since this is a testnet, the ETH has no real monetary value — you can get it free from Sepolia faucets.</div></div>
         </div>
       </div>
     </div>
@@ -1885,7 +2013,7 @@
       <div class="footer-top">
         <div class="footer-brand">
           <img src="assets/logo-full.png" alt="ShieldOdds" class="footer-logo" />
-          <p>A privacy-preserving prediction market where your bet direction stays encrypted on-chain via FHE, while bet amounts and market outcomes remain fully public and verifiable.</p>
+          <p>A privacy-preserving prediction market where your bet amount stays encrypted on-chain via FHE, while bet directions and market outcomes remain fully public and verifiable.</p>
         </div>
         <div class="footer-col">
           <h4>Product</h4>
@@ -1925,16 +2053,16 @@
         <button class="modal-side" id="modalNo" onclick="selectSide(0)">🛡️ NO</button>
       </div>
       <div class="modal-input-group">
-        <label>Bet Amount</label>
+        <label>Bet Amount <span style="font-weight:400;color:var(--slate);font-size:13px;">(from encrypted balance)</span></label>
         <div class="modal-input-wrap">
           <input type="number" id="betAmount" placeholder="0.01" min="0.001" step="0.001" />
           <span class="unit">ETH</span>
         </div>
-        <div class="modal-min-bet">Minimum: 0.001 ETH</div>
+        <div class="modal-min-bet">Minimum: 0.001 ETH · Your balance: <span id="modalBalance">—</span></div>
       </div>
       <div class="modal-note">
         <span class="note-icon">🔒</span>
-        <span>Your bet direction (YES/NO) will be encrypted client-side using FHE before being sent to the contract. The bet amount is public.</span>
+        <span>Your bet amount will be encrypted client-side using FHE before being sent to the contract. The bet direction (YES/NO) is public.</span>
       </div>
       <button class="btn-place-bet" id="btnPlaceBet" onclick="placeBet()" disabled>Select a side to continue</button>
     </div>
@@ -2008,12 +2136,14 @@
 
     const CONTRACT_ABI = [
       'function marketCount() view returns (uint256)',
-      'function getMarket(uint256 marketId) view returns (string question, address creator, uint256 deadline, uint8 status, uint8 outcome, uint256 totalPool, uint256 totalWinningPool, uint256 betCount)',
-      'function MIN_BET() view returns (uint256)',
+      'function getMarket(uint256 marketId) view returns (string question, address creator, uint256 deadline, uint8 status, uint8 outcome, uint256 betCount)',
       'function owner() view returns (address)',
-      'function placeBet(uint256 marketId, bytes32 encryptedSide, bytes inputProof) payable',
+      'function deposit() payable',
+      'function placeBet(uint256 marketId, uint8 side, bytes32 encryptedAmount, bytes inputProof)',
       'function withdraw(uint256 marketId)',
+      'function requestWithdrawal(uint256 amount) returns (uint256)',
       'function payouts(uint256 marketId, address user) view returns (uint256)',
+      'function getBalanceHandle(address user) view returns (bytes32)',
     ];
 
     const STATUS_LABELS = ['Open', 'Resolved', 'Settled', 'Cancelled'];
@@ -2070,6 +2200,8 @@
         btn.classList.add('connected');
         document.getElementById('connectText').textContent = userAddress.slice(0, 6) + '…' + userAddress.slice(-4);
         showToast('Connected to Sepolia ✓');
+        showBalanceBar();
+        loadHeroMarket();
       } catch (err) {
         console.error(err);
         showToast('Failed to connect wallet', true);
@@ -2082,9 +2214,12 @@
           document.getElementById('connectBtn').classList.remove('connected');
           document.getElementById('connectText').textContent = 'Connect Wallet';
           userAddress = null;
+          document.getElementById('balance-section').style.display = 'none';
+          localBalance = 0;
         } else {
           userAddress = accounts[0];
           document.getElementById('connectText').textContent = userAddress.slice(0, 6) + '…' + userAddress.slice(-4);
+          showBalanceBar();
         }
       });
       window.ethereum.on('chainChanged', () => window.location.reload());
@@ -2129,7 +2264,7 @@
         else if (m.status === 1) { statusEl.style.color = '#E8873A'; statusEl.style.background = '#FFF3E0'; }
         else if (m.status === 3) { statusEl.style.color = '#E53935'; statusEl.style.background = '#FFEBEE'; }
         else { statusEl.style.color = '#6B6B6B'; statusEl.style.background = '#F5F5F5'; }
-        document.getElementById('heroPool').textContent = formatPool(m.totalPool);
+        document.getElementById('heroPool').textContent = m.betCount.toString() + ' placed';
         document.getElementById('heroBets').textContent = m.betCount.toString();
         document.getElementById('heroDeadline').textContent = formatDeadline(m.deadline.toNumber());
 
@@ -2203,7 +2338,7 @@
                 </div>
                 <div class="market-question">${escapeHtml(m.question)}</div>
                 <div class="market-stats">
-                  <div class="market-stat">💰 <strong>${formatPool(m.totalPool)}</strong> pool</div>
+                  <div class="market-stat">🔒 <strong>Encrypted</strong> pool</div>
                   <div class="market-stat">🎯 <strong>${m.betCount}</strong> bets</div>
                   <div class="market-stat">⏰ ${formatDeadline(m.deadline.toNumber())}</div>
                 </div>
@@ -2253,6 +2388,10 @@
       if (modalSide === 1) document.getElementById('modalYes').className = 'modal-side selected-yes';
       if (modalSide === 0) document.getElementById('modalNo').className = 'modal-side selected-no';
 
+      // Show local balance in modal
+      const modalBal = document.getElementById('modalBalance');
+      if (modalBal) modalBal.textContent = localBalance.toFixed(3) + ' ETH';
+
       updatePlaceBetBtn();
       document.getElementById('betModal').classList.add('active');
     }
@@ -2280,7 +2419,7 @@
         btn.textContent = 'Connect wallet first';
       } else {
         btn.disabled = false;
-        btn.textContent = modalSide === 1 ? '🛡️ Encrypt & Bet YES' : '🛡️ Encrypt & Bet NO';
+        btn.textContent = modalSide === 1 ? '🛡️ Bet YES (amount encrypted)' : '🛡️ Bet NO (amount encrypted)';
       }
     }
 
@@ -2303,10 +2442,10 @@
 
       const btn = document.getElementById('btnPlaceBet');
       btn.disabled = true;
-      btn.textContent = '⏳ Encrypting bet direction…';
+      btn.textContent = '⏳ Encrypting bet amount…';
 
       try {
-        // Encrypt the bet side using fhevmjs
+        // Encrypt the bet AMOUNT using fhevmjs (direction is public)
         const fheInstance = window.fhevmInstance;
         if (!fheInstance) {
           showToast('FHE not initialized. Please wait a moment and try again.', true);
@@ -2315,27 +2454,34 @@
           return;
         }
 
+        // Convert ETH amount to wei as a BigInt for euint64 encryption
+        const weiAmount = ethers.utils.parseEther(amountStr);
+        const weiStr = weiAmount.toString();
+
         const input = fheInstance.createEncryptedInput(CONTRACT_ADDRESS, userAddress);
-        input.add8(modalSide); // 0 = NO, 1 = YES
+        input.add64(BigInt(weiStr)); // encrypt the bet amount as euint64
         const encrypted = await input.encrypt();
 
-        // encrypted.handles[0] is Uint8Array, encrypted.inputProof is Uint8Array
         const handle = '0x' + Array.from(encrypted.handles[0]).map(b => b.toString(16).padStart(2, '0')).join('');
         const proof = '0x' + Array.from(encrypted.inputProof).map(b => b.toString(16).padStart(2, '0')).join('');
 
         btn.textContent = '⏳ Sending transaction…';
 
+        // placeBet(marketId, side, encryptedAmount, inputProof)
+        // side is public (0=NO, 1=YES), amount is encrypted
         const tx = await contract.placeBet(
           modalMarketId,
+          modalSide,
           handle,
-          proof,
-          { value: ethers.utils.parseEther(amountStr) }
+          proof
         );
 
         btn.textContent = '⏳ Confirming…';
         await tx.wait();
 
         showToast('Bet placed successfully! 🎉');
+        localBalance = Math.max(0, localBalance - amount);
+        updateBalanceDisplay();
         closeBetModal();
 
         // Refresh data
@@ -2376,6 +2522,88 @@
         showToast(reason.length > 80 ? reason.slice(0, 80) + '…' : reason, true);
         btn.innerHTML = originalText;
         btn.disabled = false;
+      }
+    }
+
+    // ═══════════════════════════════════════════
+    // DEPOSIT / WITHDRAW BALANCE
+    // ═══════════════════════════════════════════
+    let localBalance = 0; // track balance locally (deposits minus bets)
+
+    function updateBalanceDisplay() {
+      const el = document.getElementById('balanceDisplay');
+      if (el) {
+        el.textContent = localBalance.toFixed(localBalance < 0.01 && localBalance > 0 ? 4 : 3) + ' ETH';
+      }
+    }
+
+    function showBalanceBar() {
+      const section = document.getElementById('balance-section');
+      if (section && userAddress) {
+        section.style.display = 'block';
+        updateBalanceDisplay();
+      }
+    }
+
+    async function depositETH() {
+      if (!contract) {
+        showToast('Connect your wallet first', true);
+        return;
+      }
+      const amountStr = document.getElementById('depositAmount').value;
+      const amount = parseFloat(amountStr);
+      if (!amount || amount <= 0) {
+        showToast('Enter a deposit amount', true);
+        return;
+      }
+
+      const btn = event.target.closest('button');
+      const originalText = btn.innerHTML;
+      try {
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Depositing…';
+        const tx = await contract.deposit({ value: ethers.utils.parseEther(amountStr) });
+        showToast('Deposit submitted — confirming…');
+        await tx.wait();
+        localBalance += amount;
+        updateBalanceDisplay();
+        document.getElementById('depositAmount').value = '';
+        showToast('💳 Deposited ' + amountStr + ' ETH into encrypted balance!');
+      } catch (err) {
+        console.error('deposit error:', err);
+        const reason = err.reason || err.message || 'Deposit failed';
+        showToast(reason.length > 80 ? reason.slice(0, 80) + '…' : reason, true);
+      } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+      }
+    }
+
+    async function withdrawBalance() {
+      if (!contract) {
+        showToast('Connect your wallet first', true);
+        return;
+      }
+      const amountStr = prompt('Enter ETH amount to withdraw from your encrypted balance:');
+      if (!amountStr) return;
+      const amount = parseFloat(amountStr);
+      if (!amount || amount <= 0) {
+        showToast('Invalid amount', true);
+        return;
+      }
+
+      try {
+        showToast('⏳ Requesting withdrawal — this is a two-step process…');
+        const weiAmount = ethers.utils.parseEther(amountStr);
+        const tx = await contract.requestWithdrawal(weiAmount);
+        await tx.wait();
+        localBalance = Math.max(0, localBalance - amount);
+        updateBalanceDisplay();
+        showToast('✅ Withdrawal requested! Awaiting KMS decryption to verify balance. You\'ll need to call completeWithdrawal() once the proof is available.');
+      } catch (err) {
+        console.error('requestWithdrawal error:', err);
+        const reason = err.reason || err.message || 'Withdrawal request failed';
+        showToast(reason.length > 80 ? reason.slice(0, 80) + '…' : reason, true);
       }
     }
 

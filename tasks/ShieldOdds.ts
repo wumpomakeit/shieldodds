@@ -12,7 +12,6 @@ task("shieldodds:createMarket")
     const tx = await contract.createMarket(taskArguments.question, taskArguments.deadline);
     const receipt = await tx.wait();
 
-    // Parse MarketCreated event
     const event = receipt?.logs
       .map((log: any) => {
         try {
@@ -48,8 +47,6 @@ task("shieldodds:getMarket")
     console.log(`   Deadline: ${new Date(Number(market.deadline) * 1000).toISOString()}`);
     console.log(`   Status: ${statusNames[Number(market.status)]}`);
     console.log(`   Outcome: ${Number(market.status) >= 1 ? (market.outcome === 1n ? "YES" : "NO") : "Pending"}`);
-    console.log(`   Total Pool: ${ethers.formatEther(market.totalPool)} ETH`);
-    console.log(`   Winning Pool: ${ethers.formatEther(market.totalWinningPool)} ETH`);
     console.log(`   Bet Count: ${market.betCount}`);
   });
 
@@ -75,10 +72,24 @@ task("shieldodds:getHandles")
     const contract = await ethers.getContractAt("ShieldOdds", deployment.address);
 
     const handles = await contract.getMarketHandles(taskArguments.id);
-    console.log(`\n🔐 Encrypted handles for Market #${taskArguments.id}:`);
+    console.log(`\n🔐 Encrypted bet amount handles for Market #${taskArguments.id}:`);
     handles.forEach((h: string, i: number) => {
       console.log(`   Bet #${i}: ${h}`);
     });
+  });
+
+task("shieldodds:deposit")
+  .addParam("amount", "ETH amount to deposit (e.g. '0.1')")
+  .setAction(async function (taskArguments: TaskArguments, hre) {
+    const { ethers, deployments } = hre;
+    const { ShieldOdds: deployment } = await deployments.all();
+    const contract = await ethers.getContractAt("ShieldOdds", deployment.address);
+
+    const value = ethers.parseEther(taskArguments.amount);
+    const tx = await contract.deposit({ value });
+    await tx.wait();
+
+    console.log(`✅ Deposited ${taskArguments.amount} ETH into encrypted balance`);
   });
 
 task("shieldodds:info").setAction(async function (_taskArguments: TaskArguments, hre) {
