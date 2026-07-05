@@ -447,7 +447,7 @@
             <input type="number" id="depositAmount" placeholder="0.1" min="0.001" step="0.001" class="deposit-input" />
             <button class="btn-deposit" onclick="depositETH()">💳 Deposit ETH</button>
           </div>
-          <button class="btn-withdraw-balance" onclick="withdrawBalance()">↩ Withdraw</button>
+          <button class="btn-withdraw-balance" onclick="openWithdrawModal()">↩ Withdraw</button>
         </div>
       </div>
     </div>
@@ -546,35 +546,64 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="withdrawModal">
+    <div class="modal">
+      <button class="modal-close" onclick="closeWithdrawModal()">✕</button>
+      <h3>Withdraw Balance</h3>
+      <div class="modal-question">Your encrypted balance: <span id="withdrawModalBalance">—</span></div>
+      <div class="modal-input-group">
+        <label>Amount to Withdraw</label>
+        <div class="modal-input-wrap">
+          <input type="number" id="withdrawAmount" placeholder="0.01" min="0.001" step="0.001" />
+          <span class="unit">ETH</span>
+        </div>
+      </div>
+      <div class="modal-note">
+        <span class="note-icon">⏳</span>
+        <span>Withdrawals are a two-step process: your request is submitted on-chain, then the KMS decrypts and verifies your balance before releasing ETH. This can take a moment.</span>
+      </div>
+      <button class="btn-place-bet" id="btnConfirmWithdraw" onclick="submitWithdraw()">↩ Request Withdrawal</button>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script type="module">
     import { initFhevm, createInstance } from 'https://cdn.jsdelivr.net/npm/fhevmjs@0.6.2/bundle.js';
-    let fhevmInstance = null;
-    async function initFHE() {
+
+    window.fhevmInstance = null;
+    window.fhevmReady = false;
+    window.fhevmFailed = false;
+
+    async function initFHE(retryCount = 0) {
       try {
         await initFhevm();
         const isLocal = window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         const rpcForFhe = isLocal ? 'https://ethereum-sepolia-rpc.publicnode.com' : window.location.origin + '/api/rpc';
-        fhevmInstance = await createInstance({
+        const instance = await createInstance({
           kmsContractAddress: '0xbE0E383937d564D7FF0BC3b46c51f0bF8d5C311A',
           aclContractAddress: '0xf0Ffdc93b7E186bC2f8CB3dAA75D86d1930A433D',
           networkUrl: rpcForFhe,
           gatewayUrl: 'https://gateway.sepolia.zama.ai/',
         });
+        window.fhevmInstance = instance;
+        window.fhevmReady = true;
+        window.fhevmFailed = false;
         console.log('fhEVM initialized ✓');
+        if (typeof window.onFheReady === 'function') window.onFheReady();
       } catch (err) {
-        console.warn('fhEVM init failed (FHE betting may not work):', err);
+        console.error('fhEVM init failed:', err);
+        window.fhevmReady = false;
+        window.fhevmFailed = true;
+        if (typeof window.onFheFailed === 'function') window.onFheFailed(err);
+        // auto-retry up to 3 times with backoff, since this is often a transient network/gateway hiccup
+        if (retryCount < 3) {
+          setTimeout(() => initFHE(retryCount + 1), 2000 * (retryCount + 1));
+        }
       }
     }
-    window.fhevmInstance = null;
-    window.fhevmReady = false;
     window.initFHE = initFHE;
-    initFHE().then(() => {
-      window.fhevmInstance = fhevmInstance;
-      window.fhevmReady = true;
-      if (typeof window.onFheReady === 'function') window.onFheReady();
-    });
+    initFHE();
   </script>
 
   <script>
@@ -720,7 +749,13 @@
       const section = document.getElementById('balance-section');
       if (section && userAddress) {
         section.style.display = 'block';
-        loadRealBalance();
+        if (window.fhevmReady) {
+          loadRealBalance();
+        } else {
+          const el = document.getElementById('balanceDisplay');
+          if (el) el.textContent = 'Loading…';
+          window.onFheReady = () => { loadRealBalance(); updatePlaceBetBtn(); };
+        }
       }
     }
 
@@ -942,10 +977,18 @@
 
     function updatePlaceBetBtn() {
       const btn = document.getElementById('btnPlaceBet');
+      if (window.fhevmFailed && !window.fhevmReady) {
+        btn.disabled = true;
+        btn.textContent = '⚠️ Encryption failed to load — retrying…';
+        window.onFheReady = () => updatePlaceBetBtn();
+        window.onFheFailed = () => updatePlaceBetBtn();
+        return;
+      }
       if (!window.fhevmReady) {
         btn.disabled = true;
         btn.textContent = '⏳ Initializing encryption…';
         window.onFheReady = () => updatePlaceBetBtn();
+        window.onFheFailed = () => updatePlaceBetBtn();
         return;
       }
       if (modalSide === null) {
@@ -1112,30 +1155,52 @@
       }
     }
 
-    async function withdrawBalance() {
+    function openWithdrawModal() {
       if (!contract) {
         showToast('Connect your wallet first', true);
         return;
       }
-      const amountStr = window.prompt('Enter ETH amount to withdraw from your encrypted balance:');
-      if (!amountStr) return;
+      document.getElementById('withdrawAmount').value = '';
+      document.getElementById('withdrawModalBalance').textContent = localBalance.toFixed(3) + ' ETH';
+      document.getElementById('withdrawModal').classList.add('active');
+    }
+
+    function closeWithdrawModal() {
+      document.getElementById('withdrawModal').classList.remove('active');
+    }
+
+    async function submitWithdraw() {
+      const amountStr = document.getElementById('withdrawAmount').value;
       const amount = parseFloat(amountStr);
       if (!amount || amount <= 0) {
         showToast('Invalid amount', true);
         return;
       }
+      if (amount > localBalance) {
+        showToast('Amount exceeds your known balance', true);
+        return;
+      }
+
+      const btn = document.getElementById('btnConfirmWithdraw');
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '⏳ Requesting withdrawal…';
 
       try {
-        showToast('⏳ Requesting withdrawal — this is a two-step process…');
         const weiAmount = ethers.utils.parseEther(amountStr);
         const tx = await contract.requestWithdrawal(weiAmount);
+        showToast('Withdrawal request submitted — confirming…');
         await tx.wait();
         await loadRealBalance();
-        showToast('✅ Withdrawal requested! Awaiting KMS decryption to verify balance. You\'ll need to call completeWithdrawal() once the proof is available.');
+        showToast('✅ Withdrawal requested! Awaiting KMS decryption to verify balance, then ETH will be released.');
+        closeWithdrawModal();
       } catch (err) {
         console.error('requestWithdrawal error:', err);
         const reason = err.reason || err.message || 'Withdrawal request failed';
         showToast(reason.length > 80 ? reason.slice(0, 80) + '…' : reason, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
       }
     }
 
@@ -1169,6 +1234,9 @@
     });
     document.getElementById('legalModal').addEventListener('click', (e) => {
       if (e.target === e.currentTarget) e.currentTarget.classList.remove('active');
+    });
+    document.getElementById('withdrawModal').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) closeWithdrawModal();
     });
 
     (function() {
