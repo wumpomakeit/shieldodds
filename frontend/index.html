@@ -1745,7 +1745,7 @@
         <div class="step-card">
           <div class="step-number">3<span class="step-icon">⚖️</span></div>
           <div class="step-title">Resolve &amp; Settle</div>
-          <div class="step-desc">After the deadline, the creator resolves the outcome. The KMS decrypts all bet amounts with proof, and the contract computes pro-rata payouts.</div>
+          <div class="step-desc">After the deadline, the Chainlink oracle reads the live price and auto-resolves the outcome. The KMS decrypts all bet amounts with proof, and the contract computes pro-rata payouts.</div>
           <span class="step-highlight">KMS Verified</span>
         </div>
         <div class="step-card">
@@ -1987,7 +1987,7 @@
             <span>Who resolves the market outcome?</span>
             <div class="faq-toggle">+</div>
           </div>
-          <div class="faq-a"><div class="faq-a-inner">The market creator resolves the outcome by calling the resolve function after the deadline. They set the winning side (YES or NO), then the settlement process decrypts all bet amounts using KMS-verified proofs and computes pro-rata payouts. The creator can also cancel a market before resolution.</div></div>
+          <div class="faq-a"><div class="faq-a-inner">For crypto price markets, resolution is <strong>automatic via Chainlink oracle</strong>. After the deadline, anyone can trigger resolution — the contract reads the live price directly from Chainlink's on-chain price feed and determines the outcome (e.g., did BTC reach $100k?). No human input needed. For custom markets without a price feed, the creator resolves manually. After resolution, the settlement process decrypts all bet amounts using KMS-verified proofs and computes pro-rata payouts.</div></div>
         </div>
         <div class="faq-item">
           <div class="faq-q" onclick="toggleFaq(this)">
@@ -2122,7 +2122,7 @@
     // ═══════════════════════════════════════════
     // CONFIG
     // ═══════════════════════════════════════════
-    const CONTRACT_ADDRESS = '0xc48A9401b71A2f1006f43f03b0DC5c6375ffec33';
+    const CONTRACT_ADDRESS = '0x96BD5Fd9eD51b0c95C3B7a867DdB888f731Be5e2';
     const SEPOLIA_CHAIN_ID = '0xaa36a7';
 
     // Use the serverless RPC proxy in production so the Alchemy key
@@ -2136,15 +2136,27 @@
 
     const CONTRACT_ABI = [
       'function marketCount() view returns (uint256)',
-      'function getMarket(uint256 marketId) view returns (string question, address creator, uint256 deadline, uint8 status, uint8 outcome, uint256 betCount)',
+      'function getMarket(uint256 marketId) view returns (string question, address creator, uint256 deadline, uint8 status, uint8 outcome, uint256 betCount, address priceFeed, int256 targetPrice, int256 resolvedPrice)',
+      'function getLatestPrice(uint256 marketId) view returns (int256 price, uint8 feedDecimals, uint256 updatedAt)',
+      'function createMarket(string question, uint256 deadline, address priceFeed, int256 targetPrice) returns (uint256)',
       'function owner() view returns (address)',
       'function deposit() payable',
       'function placeBet(uint256 marketId, uint8 side, bytes32 encryptedAmount, bytes inputProof)',
+      'function resolve(uint256 marketId)',
+      'function resolveManual(uint256 marketId, uint8 outcome)',
       'function withdraw(uint256 marketId)',
       'function requestWithdrawal(uint256 amount) returns (uint256)',
       'function payouts(uint256 marketId, address user) view returns (uint256)',
       'function getBalanceHandle(address user) view returns (bytes32)',
     ];
+
+    // Chainlink Price Feed addresses on Sepolia
+    const CHAINLINK_FEEDS = {
+      'BTC/USD':  { address: '0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43', decimals: 8 },
+      'ETH/USD':  { address: '0x694AA1769357215DE4FAC081bf1f309aDC325306', decimals: 8 },
+      'LINK/USD': { address: '0xc59E3633BAAC79493d908e63626716e204A45EdF', decimals: 8 },
+    };
+    const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
     const STATUS_LABELS = ['Open', 'Resolved', 'Settled', 'Cancelled'];
     const STATUS_CLASSES = ['open', 'resolved', 'settled', 'cancelled'];
@@ -2257,26 +2269,50 @@
         }
         heroMarketId = total - 1;
         const m = await readContract.getMarket(heroMarketId);
+        const isOracleMarket = m.priceFeed !== ZERO_ADDRESS;
         document.getElementById('heroQuestion').textContent = m.question;
-        document.getElementById('heroStatusText').textContent = STATUS_LABELS[m.status];
+
+        // Show oracle badge
+        let statusLabel = STATUS_LABELS[m.status];
+        if (isOracleMarket) statusLabel = '🔗 ' + statusLabel;
+        document.getElementById('heroStatusText').textContent = statusLabel;
         const statusEl = document.getElementById('heroStatus');
         if (m.status === 0) { statusEl.style.color = '#4CAF50'; statusEl.style.background = '#E8F5E9'; }
         else if (m.status === 1) { statusEl.style.color = '#E8873A'; statusEl.style.background = '#FFF3E0'; }
         else if (m.status === 3) { statusEl.style.color = '#E53935'; statusEl.style.background = '#FFEBEE'; }
         else { statusEl.style.color = '#6B6B6B'; statusEl.style.background = '#F5F5F5'; }
+
+        // Show live price for oracle markets
+        let priceInfo = '';
+        if (isOracleMarket) {
+          try {
+            const priceData = await readContract.getLatestPrice(heroMarketId);
+            const livePrice = Number(priceData.price) / (10 ** Number(priceData.feedDecimals));
+            const targetPrice = Number(m.targetPrice) / (10 ** Number(priceData.feedDecimals));
+            priceInfo = ` · 💰 $${livePrice.toLocaleString(undefined, {maximumFractionDigits: 2})} (target: $${targetPrice.toLocaleString(undefined, {maximumFractionDigits: 2})})`;
+          } catch(_) {}
+        }
+
         document.getElementById('heroPool').textContent = m.betCount.toString() + ' placed';
         document.getElementById('heroBets').textContent = m.betCount.toString();
-        document.getElementById('heroDeadline').textContent = formatDeadline(m.deadline.toNumber());
+        document.getElementById('heroDeadline').textContent = formatDeadline(m.deadline.toNumber()) + priceInfo;
 
         // Update hero card buttons based on market status
         const sidesEl = document.getElementById('heroCardSides');
         const isOpen = m.status === 0 && new Date(m.deadline.toNumber() * 1000) > new Date();
         const isClaimable = m.status === 2 || m.status === 3;
+        const isPastDeadline = m.status === 0 && new Date(m.deadline.toNumber() * 1000) <= new Date();
 
         if (isOpen) {
           sidesEl.innerHTML = `
             <button class="side-btn side-yes" onclick="openBetModal(heroMarketId, 1)">🛡️ YES</button>
             <button class="side-btn side-no" onclick="openBetModal(heroMarketId, 0)">🛡️ NO</button>
+          `;
+        } else if (isPastDeadline && isOracleMarket) {
+          sidesEl.innerHTML = `
+            <button class="side-btn side-yes" style="width:100%;background:linear-gradient(135deg,#E8873A,#D4722A);color:#fff;border:none;" onclick="resolveOracleMarket(heroMarketId)">
+              🔗 Resolve with Chainlink Oracle
+            </button>
           `;
         } else if (isClaimable && userAddress) {
           try {
@@ -2288,12 +2324,13 @@
                 </button>
               `;
             } else {
-              sidesEl.innerHTML = `<span style="color:var(--slate);font-size:14px;">${m.status === 2 ? 'Market settled — ' + (m.outcome === 1 ? 'YES' : 'NO') + ' won' : 'Market cancelled'}</span>`;
+              const priceNote = m.resolvedPrice != 0 ? ` (price: $${(Number(m.resolvedPrice) / 1e8).toLocaleString(undefined, {maximumFractionDigits:2})})` : '';
+              sidesEl.innerHTML = `<span style="color:var(--slate);font-size:14px;">${m.status === 2 ? 'Market settled — ' + (m.outcome === 1 ? 'YES' : 'NO') + ' won' + priceNote : 'Market cancelled'}</span>`;
             }
           } catch(_) {
             sidesEl.innerHTML = `<span style="color:var(--slate);font-size:14px;">${STATUS_LABELS[m.status]}</span>`;
           }
-        } else if (!isOpen && m.status === 0) {
+        } else if (isPastDeadline) {
           sidesEl.innerHTML = `<span style="color:var(--slate);font-size:14px;">⏰ Betting period ended — awaiting resolution</span>`;
         } else {
           sidesEl.innerHTML = `<span style="color:var(--slate);font-size:14px;">${STATUS_LABELS[m.status]}</span>`;
@@ -2318,7 +2355,9 @@
         let html = '';
         for (let i = total - 1; i >= Math.max(0, total - limit); i--) {
           const m = await readContract.getMarket(i);
+          const isOracle = m.priceFeed !== ZERO_ADDRESS;
           const isOpen = m.status === 0 && new Date(m.deadline.toNumber() * 1000) > new Date();
+          const isPastDeadline = m.status === 0 && new Date(m.deadline.toNumber() * 1000) <= new Date();
           const isClaimable = m.status === 2 || m.status === 3; // Settled or Cancelled
 
           // Check if connected user has pending payout
@@ -2328,33 +2367,53 @@
           }
           const hasPayout = !userPayout.isZero();
 
+          // Get live price for oracle markets
+          let livePriceHtml = '';
+          if (isOracle) {
+            try {
+              const priceData = await readContract.getLatestPrice(i);
+              const livePrice = Number(priceData.price) / (10 ** Number(priceData.feedDecimals));
+              const targetPrice = Number(m.targetPrice) / (10 ** Number(priceData.feedDecimals));
+              livePriceHtml = `<div class="market-stat">💰 <strong>$${livePrice.toLocaleString(undefined, {maximumFractionDigits: 2})}</strong> / $${targetPrice.toLocaleString(undefined, {maximumFractionDigits: 2})}</div>`;
+            } catch(_) {}
+          }
+
+          // Resolved price info
+          let resolvedPriceNote = '';
+          if (m.status >= 1 && m.resolvedPrice != 0) {
+            resolvedPriceNote = ` @ $${(Number(m.resolvedPrice) / 1e8).toLocaleString(undefined, {maximumFractionDigits:2})}`;
+          }
+
+          // Action button
+          let actionHtml = '';
+          if (isOpen) {
+            actionHtml = `<button class="btn-bet" onclick="openBetModal(${i})">🛡️ View & Bet</button>`;
+          } else if (isPastDeadline && isOracle) {
+            actionHtml = `<button class="btn-bet" style="background:linear-gradient(135deg,#E8873A,#D4722A);color:#fff;" onclick="resolveOracleMarket(${i})">🔗 Resolve</button>`;
+          } else if (hasPayout) {
+            actionHtml = `<button class="btn-claim" onclick="claimWinnings(${i})">💰 Claim ${ethers.utils.formatEther(userPayout)} ETH</button>`;
+          } else {
+            actionHtml = `<button class="btn-bet" disabled>${m.status === 0 ? '⏰ Ended' : STATUS_LABELS[m.status]}</button>`;
+          }
+
           html += `
             <div class="market-card">
               <div class="market-info">
                 <div class="market-meta">
                   <span class="market-id">#${i}</span>
-                  <span class="market-status-badge ${STATUS_CLASSES[m.status]}">${STATUS_LABELS[m.status]}</span>
-                  ${m.status === 2 ? `<span class="market-outcome-badge">${m.outcome === 1 ? '✅ YES' : '❌ NO'} won</span>` : ''}
+                  <span class="market-status-badge ${STATUS_CLASSES[m.status]}">${isOracle ? '🔗 ' : ''}${STATUS_LABELS[m.status]}</span>
+                  ${m.status === 2 ? `<span class="market-outcome-badge">${m.outcome === 1 ? '✅ YES' : '❌ NO'} won${resolvedPriceNote}</span>` : ''}
                 </div>
                 <div class="market-question">${escapeHtml(m.question)}</div>
                 <div class="market-stats">
                   <div class="market-stat">🔒 <strong>Encrypted</strong> pool</div>
                   <div class="market-stat">🎯 <strong>${m.betCount}</strong> bets</div>
                   <div class="market-stat">⏰ ${formatDeadline(m.deadline.toNumber())}</div>
+                  ${livePriceHtml}
                 </div>
               </div>
               <div class="market-actions">
-                ${isOpen ? `
-                  <button class="btn-bet" onclick="openBetModal(${i})">🛡️ View & Bet</button>
-                ` : hasPayout ? `
-                  <button class="btn-claim" onclick="claimWinnings(${i})">
-                    💰 Claim ${ethers.utils.formatEther(userPayout)} ETH
-                  </button>
-                ` : `
-                  <button class="btn-bet" disabled>
-                    ${m.status === 0 ? '⏰ Ended' : STATUS_LABELS[m.status]}
-                  </button>
-                `}
+                ${actionHtml}
               </div>
             </div>
           `;
@@ -2500,6 +2559,33 @@
     // ═══════════════════════════════════════════
     // CLAIM WINNINGS (withdraw)
     // ═══════════════════════════════════════════
+    async function resolveOracleMarket(marketId) {
+      if (!contract) {
+        showToast('Connect your wallet first', true);
+        return;
+      }
+      const btn = event.target.closest('button');
+      const originalText = btn.innerHTML;
+      try {
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Reading Chainlink oracle…';
+        const tx = await contract.resolve(marketId);
+        showToast('Resolution transaction submitted — reading price from Chainlink…');
+        await tx.wait();
+        const m = await readContract.getMarket(marketId);
+        const priceNote = m.resolvedPrice != 0 ? ` at $${(Number(m.resolvedPrice) / 1e8).toLocaleString(undefined, {maximumFractionDigits:2})}` : '';
+        showToast(`🎯 Market resolved${priceNote} — outcome: ${m.outcome === 1 ? 'YES' : 'NO'}`);
+        loadHeroMarket();
+        loadMarketsList();
+      } catch (err) {
+        console.error('resolve oracle error:', err);
+        const reason = err.reason || err.data?.message || err.message || 'Transaction failed';
+        showToast(reason.length > 80 ? reason.slice(0, 80) + '…' : reason, true);
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+      }
+    }
+
     async function claimWinnings(marketId) {
       if (!contract) {
         showToast('Connect your wallet first', true);

@@ -4,6 +4,23 @@ pragma solidity ^0.8.24;
 import {FHE, euint64, externalEuint64, ebool} from "@fhevm/solidity/lib/FHE.sol";
 import {ZamaEthereumConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
 
+/// @title Chainlink AggregatorV3Interface (minimal)
+/// @dev Only the functions we need — no npm dependency required.
+interface AggregatorV3Interface {
+    function latestRoundData()
+        external
+        view
+        returns (
+            uint80 roundId,
+            int256 answer,
+            uint256 startedAt,
+            uint256 updatedAt,
+            uint80 answeredInRound
+        );
+
+    function decimals() external view returns (uint8);
+}
+
 /// @title FHESafeMath — Safe arithmetic for encrypted values
 /// @notice Adapted from OpenZeppelin Confidential Contracts (v0.5.0)
 /// @dev Handles uninitialized euint64 (bytes32(0) ≡ 0) gracefully.
@@ -33,13 +50,17 @@ library FHESafeMath {
     }
 }
 
-/// @title ShieldOdds — Confidential Prediction Market (FHE-native)
+/// @title ShieldOdds — Confidential Prediction Market (FHE-native, Chainlink Oracle)
 /// @notice A prediction market where bet AMOUNTS are encrypted using FHEVM.
 ///         Bet directions (YES/NO) are public; bet sizes are hidden on-chain via FHE
 ///         to prevent whale tracking and size-based front-running.
+///         Markets can be resolved automatically via Chainlink price feeds
+///         or manually by the creator.
 /// @dev Built on Zama's fhevm-hardhat-template.
 ///      - Users deposit ETH → encrypted internal balance (euint64)
 ///      - Bets deduct from encrypted balance; direction is public, amount is encrypted
+///      - Oracle markets: resolve() reads Chainlink price feed → auto-determines outcome
+///      - Manual markets: resolveManual() lets creator set outcome
 ///      - Settlement decrypts amounts via KMS for pro-rata payout calculation
 ///      - Unused balance can be withdrawn via async two-step pattern (KMS verification)
 contract ShieldOdds is ZamaEthereumConfig {
@@ -49,7 +70,7 @@ contract ShieldOdds is ZamaEthereumConfig {
 
     enum MarketStatus {
         Open,       // accepting bets
-        Resolved,   // outcome set by creator, awaiting settlement
+        Resolved,   // outcome set, awaiting settlement
         Settled,    // bets decrypted + payouts computed
         Cancelled   // refund scenario
     }
@@ -61,6 +82,10 @@ contract ShieldOdds is ZamaEthereumConfig {
         MarketStatus status;
         uint8 outcome;              // 0 = NO, 1 = YES (set after resolution)
         uint256 betCount;           // public counter (bet amounts hidden)
+        // ── Chainlink Oracle fields ──
+        address priceFeed;          // Chainlink aggregator (address(0) = manual market)
+        int256 targetPrice;         // target price in feed's decimals (e.g. 8 for USD feeds)
+        int256 resolvedPrice;       // actual price at resolution (0 for manual markets)
     }
 
     struct Bet {
@@ -98,12 +123,22 @@ contract ShieldOdds is ZamaEthereumConfig {
     address public owner;
     uint256 public accumulatedFees;
 
+    /// @notice Maximum staleness for Chainlink price feed data (24h for testnet)
+    uint256 public constant MAX_PRICE_STALENESS = 24 hours;
+
     // ───────────────────────── Events ────────────────────────
 
     event Deposited(address indexed user, uint256 amount);
-    event MarketCreated(uint256 indexed marketId, string question, uint256 deadline, address creator);
+    event MarketCreated(
+        uint256 indexed marketId,
+        string question,
+        uint256 deadline,
+        address creator,
+        address priceFeed,
+        int256 targetPrice
+    );
     event BetPlaced(uint256 indexed marketId, uint256 indexed betId, address indexed bettor, uint8 side);
-    event MarketResolved(uint256 indexed marketId, uint8 outcome);
+    event MarketResolved(uint256 indexed marketId, uint8 outcome, int256 resolvedPrice);
     event MarketSettled(uint256 indexed marketId, uint256 totalPool, uint256 winningPool);
     event MarketCancelled(uint256 indexed marketId);
     event BetRevealed(uint256 indexed marketId, uint256 indexed betId, uint256 amount);
@@ -136,6 +171,10 @@ contract ShieldOdds is ZamaEthereumConfig {
     error HandleMismatch(uint256 index);
     error BetNotSettled();
     error SingleBetOnly();
+    error NotOracleMarket();
+    error IsOracleMarket();
+    error StalePriceFeed();
+    error InvalidPriceFeed();
 
     // ───────────────────────── Modifiers ─────────────────────
 
@@ -252,14 +291,29 @@ contract ShieldOdds is ZamaEthereumConfig {
     // ═══════════════════════════════════════════════════════════
 
     /// @notice Create a new prediction market.
-    /// @param question The question being predicted
-    /// @param deadline Unix timestamp after which betting closes
+    /// @param question The question being predicted (e.g. "Will BTC reach $100k before July 31?")
+    /// @param deadline Unix timestamp after which betting closes and resolution can occur
+    /// @param priceFeed Chainlink aggregator address for oracle resolution (address(0) for manual)
+    /// @param targetPrice Target price in the feed's native decimals (e.g. 100000e8 for $100k USD).
+    ///        Ignored if priceFeed is address(0).
     /// @return marketId The ID of the newly created market
     function createMarket(
         string calldata question,
-        uint256 deadline
+        uint256 deadline,
+        address priceFeed,
+        int256 targetPrice
     ) external returns (uint256 marketId) {
         if (deadline <= block.timestamp) revert DeadlineMustBeInFuture();
+
+        // Validate the Chainlink feed if provided
+        if (priceFeed != address(0)) {
+            // Quick sanity check: try to read decimals (reverts if not a valid feed)
+            try AggregatorV3Interface(priceFeed).decimals() returns (uint8) {
+                // valid
+            } catch {
+                revert InvalidPriceFeed();
+            }
+        }
 
         marketId = marketCount++;
         Market storage m = markets[marketId];
@@ -267,8 +321,10 @@ contract ShieldOdds is ZamaEthereumConfig {
         m.creator = msg.sender;
         m.deadline = deadline;
         m.status = MarketStatus.Open;
+        m.priceFeed = priceFeed;
+        m.targetPrice = targetPrice;
 
-        emit MarketCreated(marketId, question, deadline, msg.sender);
+        emit MarketCreated(marketId, question, deadline, msg.sender, priceFeed, targetPrice);
     }
 
     /// @notice Place a bet on a market with a public side and encrypted amount.
@@ -319,12 +375,55 @@ contract ShieldOdds is ZamaEthereumConfig {
         emit BetPlaced(marketId, betId, msg.sender, side);
     }
 
-    /// @notice Resolve a market by setting the outcome. Only callable by creator after deadline.
-    /// @dev Also marks all bet amounts for public decryption via KMS so settle() can proceed.
-    /// @param marketId The market to resolve
-    /// @param outcome The outcome: 0 = NO, 1 = YES
-    function resolve(uint256 marketId, uint8 outcome) external {
+    /// @notice Resolve an oracle market using Chainlink price feed data.
+    /// @dev Permissionless — anyone can call after the deadline passes.
+    ///      Reads the latest price from the market's Chainlink feed and compares to targetPrice.
+    ///      YES (outcome=1) if price >= targetPrice, NO (outcome=0) if price < targetPrice.
+    ///      Also marks all bet amounts for KMS decryption so settle() can proceed.
+    /// @param marketId The oracle market to resolve
+    function resolve(uint256 marketId) external {
         Market storage m = markets[marketId];
+        if (m.priceFeed == address(0)) revert NotOracleMarket();
+        if (m.status != MarketStatus.Open) revert MarketNotOpen();
+        if (block.timestamp < m.deadline) revert DeadlineNotReached();
+
+        // Read latest price from Chainlink
+        AggregatorV3Interface feed = AggregatorV3Interface(m.priceFeed);
+        (
+            ,
+            int256 price,
+            ,
+            uint256 updatedAt,
+
+        ) = feed.latestRoundData();
+
+        // Staleness check
+        if (block.timestamp - updatedAt > MAX_PRICE_STALENESS) revert StalePriceFeed();
+
+        // Determine outcome: YES if price >= target, NO otherwise
+        uint8 outcome = price >= m.targetPrice ? 1 : 0;
+
+        m.outcome = outcome;
+        m.resolvedPrice = price;
+        m.status = MarketStatus.Resolved;
+
+        // Mark all encrypted bet amounts for public decryption
+        uint256 betCount = m.betCount;
+        for (uint256 i = 0; i < betCount; i++) {
+            FHE.makePubliclyDecryptable(_bets[marketId][i].encryptedAmount);
+        }
+
+        emit MarketResolved(marketId, outcome, price);
+    }
+
+    /// @notice Resolve a manual (non-oracle) market by setting the outcome.
+    /// @dev Only callable by the market creator after the deadline.
+    ///      For oracle markets, use resolve() instead.
+    /// @param marketId The manual market to resolve
+    /// @param outcome The outcome: 0 = NO, 1 = YES
+    function resolveManual(uint256 marketId, uint8 outcome) external {
+        Market storage m = markets[marketId];
+        if (m.priceFeed != address(0)) revert IsOracleMarket();
         if (msg.sender != m.creator) revert OnlyCreator();
         if (m.status != MarketStatus.Open) revert MarketNotOpen();
         if (block.timestamp < m.deadline) revert DeadlineNotReached();
@@ -339,7 +438,7 @@ contract ShieldOdds is ZamaEthereumConfig {
             FHE.makePubliclyDecryptable(_bets[marketId][i].encryptedAmount);
         }
 
-        emit MarketResolved(marketId, outcome);
+        emit MarketResolved(marketId, outcome, int256(0));
     }
 
     /// @notice Settle a market by providing KMS-decrypted bet amounts with proof.
@@ -541,7 +640,10 @@ contract ShieldOdds is ZamaEthereumConfig {
             uint256 deadline,
             MarketStatus status,
             uint8 outcome,
-            uint256 betCount
+            uint256 betCount,
+            address priceFeed,
+            int256 targetPrice,
+            int256 resolvedPrice
         )
     {
         Market storage m = markets[marketId];
@@ -551,8 +653,30 @@ contract ShieldOdds is ZamaEthereumConfig {
             m.deadline,
             m.status,
             m.outcome,
-            m.betCount
+            m.betCount,
+            m.priceFeed,
+            m.targetPrice,
+            m.resolvedPrice
         );
+    }
+
+    /// @notice Get the latest price from a market's Chainlink feed.
+    /// @dev Reverts if the market is not oracle-based.
+    /// @param marketId The oracle market
+    /// @return price The latest price from the feed
+    /// @return feedDecimals The number of decimals the feed uses
+    /// @return updatedAt When the feed was last updated
+    function getLatestPrice(uint256 marketId)
+        external
+        view
+        returns (int256 price, uint8 feedDecimals, uint256 updatedAt)
+    {
+        Market storage m = markets[marketId];
+        if (m.priceFeed == address(0)) revert NotOracleMarket();
+
+        AggregatorV3Interface feed = AggregatorV3Interface(m.priceFeed);
+        (, price, , updatedAt, ) = feed.latestRoundData();
+        feedDecimals = feed.decimals();
     }
 
     /// @notice Get a specific bet's public details.
