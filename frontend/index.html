@@ -1613,7 +1613,9 @@
       .faq-grid { grid-template-columns: 1fr; }
       .comparison-table { font-size: 14px; }
       .comparison-table thead th, .comparison-table tbody td { padding: 14px 16px; }
-      .market-card { grid-template-columns: 1fr; }
+      .market-card { grid-template-columns: 1fr; gap: 12px; }
+.market-actions { align-items: stretch; margin-top: 4px; }
+.btn-bet { width: 100%; justify-content: center; }
     }
 
     @media (max-width: 600px) {
@@ -1637,15 +1639,6 @@
   </style>
 </head>
 <body>
-
-  <!-- ═══════ CONTRACT INFO BAR ═══════ -->
-  <div class="contract-bar">
-    <span>Sepolia Testnet</span>
-    <span class="sep"></span>
-    <span>Contract: <a href="https://sepolia.etherscan.io/address/0xc48A9401b71A2f1006f43f03b0DC5c6375ffec33" target="_blank" rel="noopener">0xc48A…ec33</a></span>
-    <span class="sep"></span>
-    <span>Powered by <a href="https://www.zama.ai/fhevm" target="_blank" rel="noopener">Zama fhEVM</a></span>
-  </div>
 
   <!-- ═══════ NAVBAR ═══════ -->
   <div class="navbar-wrap" id="navbarWrap">
@@ -2036,9 +2029,13 @@
         </div>
       </div>
       <div class="footer-bottom">
-        <span>&copy; 2025 ShieldOdds. All rights reserved.</span>
-        <a href="https://sepolia.etherscan.io/address/0xc48A9401b71A2f1006f43f03b0DC5c6375ffec33" target="_blank" rel="noopener">Sepolia Contract ↗</a>
-      </div>
+<span>&copy; 2026 ShieldOdds. All rights reserved.</span>
+<span style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+<span>Sepolia Testnet</span>
+<a href="https://sepolia.etherscan.io/address/0xc48A9401b71A2f1006f43f03b0DC5c6375ffec33" target="_blank" rel="noopener">Contract ↗</a>
+<span>Powered by <a href="https://www.zama.ai/fhevm" target="_blank" rel="noopener">Zama fhEVM</a></span>
+</span>
+</div>
     </div>
   </footer>
 
