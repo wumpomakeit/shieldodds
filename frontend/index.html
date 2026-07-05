@@ -1207,6 +1207,60 @@
       color: var(--slate);
       font-size: 16px;
     }
+    /* Additional styles for cleaner market cards */
+.market-price-area {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 12px 0 16px 0;
+  padding: 14px 20px;
+  background: var(--cream);
+  border-radius: var(--radius-sm);
+  border-left: 4px solid var(--amber);
+}
+
+.current-price {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--charcoal);
+}
+
+.target-price {
+  font-size: 18px;
+  color: var(--slate);
+  font-weight: 500;
+}
+
+.market-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 2px solid var(--cream-dark);
+}
+
+.market-stats-left {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.stat-badge {
+  font-size: 13px;
+  color: var(--slate);
+  background: var(--cream);
+  padding: 4px 12px;
+  border-radius: 50px;
+  font-weight: 500;
+}
+
+/* Hide old stats to avoid duplication */
+.market-stats {
+  display: none;
+}
 
     /* ═══════════════════════════════════════════
        BET MODAL
@@ -2392,28 +2446,47 @@
           } else {
             actionHtml = `<button class="btn-bet" disabled>${m.status === 0 ? '⏰ Ended' : STATUS_LABELS[m.status]}</button>`;
           }
-
-          html += `
-            <div class="market-card">
-              <div class="market-info">
-                <div class="market-meta">
-                  <span class="market-id">#${i}</span>
-                  <span class="market-status-badge ${STATUS_CLASSES[m.status]}">${isOracle ? '🔗 ' : ''}${STATUS_LABELS[m.status]}</span>
-                  ${m.status === 2 ? `<span class="market-outcome-badge">${m.outcome === 1 ? '✅ YES' : '❌ NO'} won${resolvedPriceNote}</span>` : ''}
-                </div>
-                <div class="market-question">${escapeHtml(m.question)}</div>
-                <div class="market-stats">
-                  <div class="market-stat">🔒 <strong>Encrypted</strong> pool</div>
-                  <div class="market-stat">🎯 <strong>${m.betCount}</strong> bets</div>
-                  <div class="market-stat">⏰ ${formatDeadline(m.deadline.toNumber())}</div>
-                  ${livePriceHtml}
-                </div>
-              </div>
-              <div class="market-actions">
-                ${actionHtml}
-              </div>
-            </div>
-          `;
+html += `
+  <div class="market-card">
+    <div class="market-info">
+      <div class="market-meta">
+        <span class="market-id">#${i}</span>
+        <span class="market-status-badge ${STATUS_CLASSES[m.status]}">${isOracle ? '🔗 ' : ''}${STATUS_LABELS[m.status]}</span>
+        ${m.status === 2 ? `<span class="market-outcome-badge">${m.outcome === 1 ? '✅ YES' : '❌ NO'} won${resolvedPriceNote}</span>` : ''}
+      </div>
+      <div class="market-question">${escapeHtml(m.question)}</div>
+      
+      <!-- ✅ PRICE AREA (NEW) -->
+      <div class="market-price-area">
+        ${isOracle ? `
+          <span class="current-price">$${livePrice.toLocaleString(undefined, {maximumFractionDigits: 2})}</span>
+          <span class="target-price">→ $${targetPrice.toLocaleString(undefined, {maximumFractionDigits: 2})}</span>
+        ` : `
+          <span class="current-price" style="font-size:16px;color:var(--slate);">No price feed</span>
+        `}
+      </div>
+      
+      <!-- ✅ STATS (MOVED TO FOOTER LATER) -->
+      <div class="market-stats">
+        <div class="market-stat">🔒 <strong>Encrypted</strong> pool</div>
+        <div class="market-stat">🎯 <strong>${m.betCount}</strong> bets</div>
+        <div class="market-stat">⏰ ${formatDeadline(m.deadline.toNumber())}</div>
+      </div>
+    </div>
+    
+    <!-- ✅ FOOTER WITH BUTTON -->
+    <div class="market-card-footer">
+      <div class="market-stats-left">
+        <span class="stat-badge">🔒 Encrypted pool</span>
+        <span class="stat-badge">📊 ${m.betCount} bets</span>
+        <span class="stat-badge">⏳ ${formatDeadline(m.deadline.toNumber())}</span>
+      </div>
+      <div class="market-actions">
+        ${actionHtml}
+      </div>
+    </div>
+  </div>
+`;
         }
         container.innerHTML = html;
       } catch (err) {
@@ -2761,7 +2834,150 @@
         lastY = y;
       }, { passive: true });
     })();
+// ═══════════════════════════════════════════
+// BET MODAL FUNCTIONS (NEW)
+// ═══════════════════════════════════════════
 
+async function openBetModal(marketId, preselectedSide) {
+  modalMarketId = marketId;
+  modalSide = preselectedSide ?? null;
+  
+  // Check if connected
+  if (!userAddress) {
+    showToast('Please connect your wallet first', true);
+    return;
+  }
+  
+  try {
+    const m = await readContract.getMarket(marketId);
+    
+    // Fetch live price for display
+    let priceHtml = '';
+    if (m.priceFeed !== ZERO_ADDRESS) {
+      try {
+        const priceData = await readContract.getLatestPrice(marketId);
+        const livePrice = Number(priceData.price) / (10 ** Number(priceData.feedDecimals));
+        const targetPrice = Number(m.targetPrice) / (10 ** Number(priceData.feedDecimals));
+        priceHtml = `<div style="font-size:14px;color:var(--amber);font-weight:600;margin:8px 0 12px 0;">💰 Current: $${livePrice.toLocaleString()} · Target: $${targetPrice.toLocaleString()}</div>`;
+      } catch(_) {}
+    }
+    
+    document.getElementById('modalQuestion').innerHTML = m.question + '<br>' + priceHtml;
+    document.getElementById('betAmount').value = '';
+
+    // Reset side selection
+    document.getElementById('modalYes').className = 'modal-side';
+    document.getElementById('modalNo').className = 'modal-side';
+    if (modalSide === 1) document.getElementById('modalYes').className = 'modal-side selected-yes';
+    if (modalSide === 0) document.getElementById('modalNo').className = 'modal-side selected-no';
+
+    // Show local balance in modal
+    const modalBal = document.getElementById('modalBalance');
+    if (modalBal) modalBal.textContent = localBalance.toFixed(3) + ' ETH';
+
+    updatePlaceBetBtn();
+    document.getElementById('betModal').classList.add('active');
+  } catch (err) {
+    console.error('Error opening bet modal:', err);
+    showToast('Could not load market data', true);
+  }
+}
+
+function closeBetModal() {
+  document.getElementById('betModal').classList.remove('active');
+  modalMarketId = null;
+  modalSide = null;
+}
+
+function selectSide(side) {
+  modalSide = side;
+  document.getElementById('modalYes').className = side === 1 ? 'modal-side selected-yes' : 'modal-side';
+  document.getElementById('modalNo').className = side === 0 ? 'modal-side selected-no' : 'modal-side';
+  updatePlaceBetBtn();
+}
+
+function updatePlaceBetBtn() {
+  const btn = document.getElementById('btnPlaceBet');
+  if (modalSide === null) {
+    btn.disabled = true;
+    btn.textContent = 'Select a side to continue';
+  } else if (!userAddress) {
+    btn.disabled = true;
+    btn.textContent = 'Connect wallet first';
+  } else {
+    btn.disabled = false;
+    btn.textContent = modalSide === 1 ? '🛡️ Bet YES (amount encrypted)' : '🛡️ Bet NO (amount encrypted)';
+  }
+}
+
+// Listen for input changes
+document.getElementById('betAmount').addEventListener('input', updatePlaceBetBtn);
+
+async function placeBet() {
+  if (modalSide === null || modalMarketId === null) return;
+  if (!userAddress || !contract) {
+    showToast('Please connect your wallet first', true);
+    return;
+  }
+
+  const amountStr = document.getElementById('betAmount').value;
+  const amount = parseFloat(amountStr);
+  if (!amount || amount < 0.001) {
+    showToast('Minimum bet is 0.001 ETH', true);
+    return;
+  }
+
+  const btn = document.getElementById('btnPlaceBet');
+  btn.disabled = true;
+  btn.textContent = '⏳ Encrypting bet amount…';
+
+  try {
+    const fheInstance = window.fhevmInstance;
+    if (!fheInstance) {
+      showToast('FHE not initialized. Please wait a moment and try again.', true);
+      btn.disabled = false;
+      updatePlaceBetBtn();
+      return;
+    }
+
+    const weiAmount = ethers.utils.parseEther(amountStr);
+    const weiStr = weiAmount.toString();
+
+    const input = fheInstance.createEncryptedInput(CONTRACT_ADDRESS, userAddress);
+    input.add64(BigInt(weiStr));
+    const encrypted = await input.encrypt();
+
+    const handle = '0x' + Array.from(encrypted.handles[0]).map(b => b.toString(16).padStart(2, '0')).join('');
+    const proof = '0x' + Array.from(encrypted.inputProof).map(b => b.toString(16).padStart(2, '0')).join('');
+
+    btn.textContent = '⏳ Sending transaction…';
+
+    const tx = await contract.placeBet(
+      modalMarketId,
+      modalSide,
+      handle,
+      proof
+    );
+
+    btn.textContent = '⏳ Confirming…';
+    await tx.wait();
+
+    showToast('Bet placed successfully! 🎉');
+    localBalance = Math.max(0, localBalance - amount);
+    updateBalanceDisplay();
+    closeBetModal();
+
+    loadHeroMarket();
+    loadMarketsList();
+  } catch (err) {
+    console.error('placeBet error:', err);
+    const reason = err.reason || err.message || 'Transaction failed';
+    showToast(reason.length > 80 ? reason.slice(0, 80) + '…' : reason, true);
+  } finally {
+    btn.disabled = false;
+    updatePlaceBetBtn();
+  }
+}
     // INIT
     // ═══════════════════════════════════════════
     document.addEventListener('DOMContentLoaded', () => {
