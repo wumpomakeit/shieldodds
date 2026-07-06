@@ -253,6 +253,18 @@
     .toast { position:fixed; bottom:24px; right:24px; padding:14px 24px; background:var(--charcoal); color:white; border-radius:12px; font-size:14px; font-weight:500; z-index:9999; transform:translateY(100px); opacity:0; transition:all .3s ease; max-width:400px; }
     .toast.show { transform:translateY(0); opacity:1; }
     .toast.error { background:var(--coral); }
+    /* ── Wallet dropdown ── */
+    .wallet-dropdown-wrapper { position:relative; flex-shrink:0; }
+    .wallet-dropdown { display:none; position:absolute; top:calc(100% + 10px); right:0; background:white; border:1px solid var(--cream-dark); border-radius:var(--radius-sm); box-shadow:0 8px 32px rgba(0,0,0,0.12); min-width:192px; z-index:2000; overflow:hidden; animation:dropIn .15s ease; }
+    .wallet-dropdown.open { display:block; }
+    @keyframes dropIn { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+    .wallet-dropdown-item { display:flex; align-items:center; gap:10px; padding:11px 16px; font-size:14px; font-weight:500; color:var(--ink); cursor:pointer; transition:background .15s; border:none; background:transparent; width:100%; text-align:left; font-family:inherit; }
+    .wallet-dropdown-item:hover { background:var(--cream-mid); }
+    .wallet-dropdown-item.danger { color:var(--no-red); }
+    .wallet-dropdown-sep { height:1px; background:var(--cream-dark); margin:4px 0; }
+    .btn-connect .chevron { font-size:9px; opacity:.65; margin-left:2px; transition:transform .2s; }
+    .wallet-dropdown.open + * .chevron,
+    .btn-connect:has(+ .wallet-dropdown.open) .chevron { transform:rotate(180deg); }
     @media (max-width:1024px) { .tech-grid{grid-template-columns:1fr 1fr;} .footer-top{grid-template-columns:1fr 1fr;gap:32px;} }
     @media (max-width:900px) {
       .hero-inner{grid-template-columns:1fr;gap:40px;} .hero-visual{order:-1;} .hero-card{max-width:400px;margin:0 auto;}
@@ -288,10 +300,25 @@
           <li><a href="#markets">Markets</a></li>
           <li><a href="#faq">FAQ</a></li>
         </ul>
+        <!-- Disconnected state -->
         <button class="btn-connect" id="connectBtn" onclick="connectWallet()">
           <span class="dot"></span>
           <span id="connectText">Connect Wallet</span>
         </button>
+        <!-- Connected state — dropdown wrapper -->
+        <div class="wallet-dropdown-wrapper" id="walletDropdownWrapper" style="display:none;">
+          <button class="btn-connect connected" id="walletBtn" onclick="toggleWalletDropdown(event)">
+            <span class="dot" style="background:#a5d6a7;"></span>
+            <span id="walletBtnText">0x1234…5678</span>
+            <span class="chevron">▼</span>
+          </button>
+          <div class="wallet-dropdown" id="walletDropdown">
+            <button class="wallet-dropdown-item" onclick="showMyProfile(event)">👤&nbsp; My Profile</button>
+            <button class="wallet-dropdown-item" onclick="showMyPositions(event)">📊&nbsp; My Positions</button>
+            <div class="wallet-dropdown-sep"></div>
+            <button class="wallet-dropdown-item danger" onclick="disconnectWallet(event)">🚪&nbsp; Disconnect</button>
+          </div>
+        </div>
       </div>
     </nav>
   </div>
@@ -770,6 +797,82 @@
     let localBalanceLoaded = false; // true once we've successfully read from chain
     let fhevmKeypair = null;
 
+    // ── localStorage helpers — balance persistence ────────────────────────────
+    // Keeps a cached deposit/withdrawal tally so the balance survives page refresh.
+    // The FHE userDecrypt result is used to sync (overwrite) this cache once available.
+
+    function _balKey(addr) { return `shieldodds_balance_${addr.toLowerCase()}`; }
+
+    function getPersistedBalance(addr) {
+      try {
+        const raw = localStorage.getItem(_balKey(addr));
+        if (!raw) return null;
+        const p = JSON.parse(raw);
+        if (typeof p.totalDeposited === 'number') return p;
+      } catch (_) {}
+      return null;
+    }
+
+    function getPersistedBalanceValue(addr) {
+      const r = getPersistedBalance(addr);
+      return r ? Math.max(0, r.totalDeposited - (r.totalWithdrawn || 0)) : null;
+    }
+
+    function persistDeposit(addr, amountEth) {
+      try {
+        const r = getPersistedBalance(addr) || { totalDeposited: 0, totalWithdrawn: 0 };
+        r.totalDeposited += amountEth;
+        localStorage.setItem(_balKey(addr), JSON.stringify(r));
+      } catch (_) {}
+    }
+
+    function persistWithdrawal(addr, amountEth) {
+      try {
+        const r = getPersistedBalance(addr) || { totalDeposited: 0, totalWithdrawn: 0 };
+        r.totalWithdrawn = (r.totalWithdrawn || 0) + amountEth;
+        localStorage.setItem(_balKey(addr), JSON.stringify(r));
+      } catch (_) {}
+    }
+
+    function syncPersistedBalance(addr, realBalanceEth) {
+      // After a successful FHE decrypt, align the persisted record with on-chain truth.
+      // We back-calculate totalDeposited so that totalDeposited - totalWithdrawn == real.
+      try {
+        const r = getPersistedBalance(addr) || { totalDeposited: 0, totalWithdrawn: 0 };
+        r.totalDeposited = realBalanceEth + (r.totalWithdrawn || 0);
+        localStorage.setItem(_balKey(addr), JSON.stringify(r));
+      } catch (_) {}
+    }
+
+    // ── localStorage helpers — bet tracking ───────────────────────────────────
+
+    function _betsKey(addr) { return `shieldodds_bets_${addr.toLowerCase()}`; }
+
+    function getStoredBets(addr) {
+      try {
+        const raw = localStorage.getItem(_betsKey(addr));
+        if (!raw) return [];
+        const p = JSON.parse(raw);
+        return Array.isArray(p) ? p : [];
+      } catch (_) { return []; }
+    }
+
+    function persistBet(addr, marketId, side, amountEth, question, txHash) {
+      try {
+        const bets = getStoredBets(addr);
+        bets.push({ marketId: Number(marketId), side, amountEth, question, txHash, timestamp: Date.now(), claimed: false });
+        localStorage.setItem(_betsKey(addr), JSON.stringify(bets));
+      } catch (_) {}
+    }
+
+    function markBetClaimed(addr, marketId) {
+      try {
+        const bets = getStoredBets(addr);
+        bets.forEach(b => { if (b.marketId === Number(marketId)) b.claimed = true; });
+        localStorage.setItem(_betsKey(addr), JSON.stringify(bets));
+      } catch (_) {}
+    }
+
     const readProvider = new ethers.providers.JsonRpcProvider(RPC_URL, { chainId: 11155111, name: 'sepolia' });
     const readContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, readProvider);
 
@@ -800,9 +903,10 @@
         // to pass (getAddress(value) === value), which fails on lowercase input.
         userAddress = ethers.utils.getAddress(accounts[0]);
         contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-        const btn = document.getElementById('connectBtn');
-        btn.classList.add('connected');
-        document.getElementById('connectText').textContent = userAddress.slice(0, 6) + '…' + userAddress.slice(-4);
+        // Switch navbar to dropdown (hide plain button, show dropdown wrapper)
+        document.getElementById('connectBtn').style.display = 'none';
+        document.getElementById('walletDropdownWrapper').style.display = '';
+        document.getElementById('walletBtnText').textContent = userAddress.slice(0, 6) + '…' + userAddress.slice(-4);
         showToast('Connected to Sepolia ✓');
         showBalanceBar();
         loadHeroMarket();
@@ -816,23 +920,27 @@
     if (window.ethereum) {
       window.ethereum.on('accountsChanged', (accounts) => {
         if (accounts.length === 0) {
-          document.getElementById('connectBtn').classList.remove('connected');
+          // Wallet disconnected — reset to plain connect button
+          document.getElementById('walletDropdownWrapper').style.display = 'none';
+          document.getElementById('connectBtn').style.display = '';
           document.getElementById('connectText').textContent = 'Connect Wallet';
           userAddress = null;
           document.getElementById('balance-section').style.display = 'none';
           localBalance = 0;
           localBalanceLoaded = false;
-          fhevmKeypair = null; // clear stale keypair — keypairs are address-scoped
+          fhevmKeypair = null;
         } else {
           const prevAddress = userAddress;
           userAddress = ethers.utils.getAddress(accounts[0]); // always checksummed
           if (prevAddress && prevAddress.toLowerCase() !== userAddress.toLowerCase()) {
             clearFheSession(prevAddress);
           }
-          fhevmKeypair = null; // new account: always regenerate keypair
+          fhevmKeypair = null;
           localBalance = 0;
           localBalanceLoaded = false;
-          document.getElementById('connectText').textContent = userAddress.slice(0, 6) + '…' + userAddress.slice(-4);
+          document.getElementById('walletBtnText').textContent = userAddress.slice(0, 6) + '…' + userAddress.slice(-4);
+          document.getElementById('connectBtn').style.display = 'none';
+          document.getElementById('walletDropdownWrapper').style.display = '';
           showBalanceBar();
           loadPendingWithdrawals();
         }
@@ -958,8 +1066,8 @@
         const prevBalance = localBalance;
         localBalance = realBalance;
         localBalanceLoaded = true;
+        syncPersistedBalance(userAddress, realBalance); // keep cache in sync
 
-        // Only trigger a DOM update if the number actually changed
         if (Math.abs(realBalance - prevBalance) > 1e-9) {
           updateBalanceDisplay();
           console.log(`fhEVM: balance reconciled ${prevBalance.toFixed(4)} → ${realBalance.toFixed(4)} ETH`);
@@ -1173,6 +1281,7 @@
         setBalanceStep('decrypt');
         localBalance = parseFloat(ethers.utils.formatEther(decrypted.toString()));
         localBalanceLoaded = true;
+        syncPersistedBalance(userAddress, localBalance); // align cache with on-chain truth
         setBalanceStep('done');
         updateBalanceDisplay();
       } catch (err) {
@@ -1210,12 +1319,21 @@
       const section = document.getElementById('balance-section');
       if (!section || !userAddress) return;
       section.style.display = 'block';
-      // Show which address this balance belongs to — clarifies cross-wallet confusion
       const note = document.getElementById('balanceAddressNote');
-      if (note) {
-        note.textContent = userAddress.slice(0, 6) + '…' + userAddress.slice(-4);
-        note.style.display = '';
+      if (note) { note.textContent = userAddress.slice(0, 6) + '…' + userAddress.slice(-4); note.style.display = ''; }
+
+      // Seed from persisted value immediately so users see their balance without
+      // waiting for the FHE gateway round-trip on every page load.
+      const persisted = getPersistedBalanceValue(userAddress);
+      if (persisted !== null && !localBalanceLoaded) {
+        localBalance = persisted;
+        localBalanceLoaded = true;
+        setBalanceStep('done');
+        updateBalanceDisplay();
+        // Still run FHE decrypt in background to verify/correct the cached value
+        if (window.fhevmReady) { backgroundReconcile(); return; }
       }
+
       if (window.fhevmReady) {
         // FHE is ready — determine whether we'll need a wallet prompt
         const session = loadFheSession(userAddress);
@@ -1540,7 +1658,10 @@
         await tx.wait();
 
         showToast('Bet placed successfully! 🎉');
-        // Optimistic instant update: subtract bet from displayed balance immediately
+        // Persist bet for My Positions
+        const betQuestion = document.getElementById('modalQuestion')?.textContent || '';
+        persistBet(userAddress, modalMarketId, modalSide, amountStr, betQuestion, tx.hash);
+        // Optimistic instant update
         if (localBalanceLoaded) {
           localBalance = Math.max(0, localBalance - amount);
           updateBalanceDisplay();
@@ -1600,6 +1721,7 @@
         showToast('Transaction submitted — waiting for confirmation…');
         await tx.wait();
         showToast('🎉 Winnings claimed successfully!');
+        if (userAddress) markBetClaimed(userAddress, marketId);
         loadHeroMarket();
         loadMarketsList();
       } catch (err) {
@@ -1635,6 +1757,7 @@
         localBalanceLoaded = true;
         setBalanceStep('done');
         updateBalanceDisplay();
+        persistDeposit(userAddress, amount); // survive page refresh
         document.getElementById('depositAmount').value = '';
         showToast('💳 Deposited ' + amountStr + ' ETH into encrypted balance!');
         backgroundReconcile();
@@ -1715,12 +1838,12 @@
           showToast('✅ Withdrawal requested! Check Pending Withdrawals to complete it.');
         }
 
-        // Optimistic: subtract from displayed balance immediately. The contract
-        // deducted from the encrypted balance at the time of the request.
+        // Optimistic: subtract from displayed balance immediately.
         if (localBalanceLoaded) {
           localBalance = Math.max(0, localBalance - amount);
           updateBalanceDisplay();
         }
+        persistWithdrawal(userAddress, amount); // survive page refresh
         closeWithdrawModal();
         loadPendingWithdrawals();
         backgroundReconcile(); // verify real balance in background
@@ -1912,6 +2035,118 @@
       el.closest('.faq-item').classList.toggle('open');
     }
 
+    // ── Wallet dropdown ───────────────────────────────────────────────────────
+
+    function toggleWalletDropdown(evt) {
+      if (evt) evt.stopPropagation();
+      document.getElementById('walletDropdown').classList.toggle('open');
+    }
+
+    function closeWalletDropdown() {
+      const d = document.getElementById('walletDropdown');
+      if (d) d.classList.remove('open');
+    }
+
+    function disconnectWallet(evt) {
+      if (evt) evt.stopPropagation();
+      closeWalletDropdown();
+      userAddress = null;
+      signer = null;
+      contract = null;
+      provider = null;
+      localBalance = 0;
+      localBalanceLoaded = false;
+      fhevmKeypair = null;
+      document.getElementById('walletDropdownWrapper').style.display = 'none';
+      const btn = document.getElementById('connectBtn');
+      btn.style.display = '';
+      document.getElementById('connectText').textContent = 'Connect Wallet';
+      document.getElementById('balance-section').style.display = 'none';
+      showToast('Wallet disconnected');
+    }
+
+    function showMyProfile(evt) {
+      if (evt) evt.stopPropagation();
+      closeWalletDropdown();
+      const bal = localBalanceLoaded
+        ? localBalance.toFixed(4) + ' ETH'
+        : (getPersistedBalanceValue(userAddress) !== null
+           ? getPersistedBalanceValue(userAddress).toFixed(4) + ' ETH (cached)'
+           : '—');
+      const bets = getStoredBets(userAddress);
+      const claimed = bets.filter(b => b.claimed).length;
+      document.getElementById('legalTitle').textContent = 'My Profile';
+      document.getElementById('legalContent').innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div style="background:var(--cream);border-radius:10px;padding:14px 16px;">
+            <div style="font-size:11px;color:var(--slate);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;">Wallet Address</div>
+            <div style="font-size:13px;font-weight:600;font-family:monospace;word-break:break-all;color:var(--charcoal);">${escapeHtml(userAddress)}</div>
+          </div>
+          <div style="background:var(--cream);border-radius:10px;padding:14px 16px;">
+            <div style="font-size:11px;color:var(--slate);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;">Encrypted Balance</div>
+            <div style="font-size:22px;font-weight:700;color:var(--amber-dark);font-family:'Fraunces',serif;">${escapeHtml(bal)}</div>
+          </div>
+          <div style="background:var(--cream);border-radius:10px;padding:14px 16px;display:flex;gap:24px;flex-wrap:wrap;">
+            <div>
+              <div style="font-size:11px;color:var(--slate);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;">Network</div>
+              <div style="font-size:14px;font-weight:600;color:var(--charcoal);">Sepolia Testnet</div>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--slate);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;">Total Bets</div>
+              <div style="font-size:14px;font-weight:600;color:var(--charcoal);">${bets.length}</div>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--slate);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;">Claimed</div>
+              <div style="font-size:14px;font-weight:600;color:var(--yes-green);">${claimed}</div>
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--light-gray);text-align:center;padding-top:4px;">
+            <a href="https://sepolia.etherscan.io/address/${escapeHtml(userAddress)}" target="_blank" rel="noopener" style="color:var(--amber);text-decoration:none;">View on Etherscan ↗</a>
+          </div>
+        </div>`;
+      document.getElementById('legalModal').classList.add('active');
+    }
+
+    function showMyPositions(evt) {
+      if (evt) evt.stopPropagation();
+      closeWalletDropdown();
+      const bets = getStoredBets(userAddress);
+      let html = '';
+      if (bets.length === 0) {
+        html = `<div style="text-align:center;padding:32px 0;">
+          <div style="font-size:40px;margin-bottom:12px;">🎯</div>
+          <div style="font-size:15px;color:var(--slate);">No bets placed yet.<br/>Deposit ETH and place your first bet!</div>
+        </div>`;
+      } else {
+        const sorted = [...bets].sort((a, b) => b.timestamp - a.timestamp);
+        html = '<div style="display:flex;flex-direction:column;gap:10px;">';
+        sorted.forEach(bet => {
+          const date = new Date(bet.timestamp).toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' });
+          const sideLabel = bet.side === 1 ? '🟢 YES' : '🔴 NO';
+          const sideBg   = bet.side === 1 ? 'var(--yes-bg)'  : 'var(--no-bg)';
+          const sideClr  = bet.side === 1 ? 'var(--yes-green)' : 'var(--no-red)';
+          const txShort  = bet.txHash ? bet.txHash.slice(0, 10) + '…' : '—';
+          html += `<div style="background:var(--cream);border-radius:10px;padding:14px 16px;border:1px solid var(--cream-dark);">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+              <span style="font-size:11px;font-weight:700;color:var(--amber);background:var(--cream-mid);padding:2px 8px;border-radius:50px;">Market #${bet.marketId}</span>
+              <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:50px;background:${sideBg};color:${sideClr};">${sideLabel}</span>
+              ${bet.claimed ? '<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:50px;background:#E8F5E9;color:var(--yes-green);">✓ Claimed</span>' : ''}
+            </div>
+            <div style="font-size:14px;font-weight:600;color:var(--charcoal);margin-bottom:8px;line-height:1.4;">${escapeHtml(bet.question || 'Unknown market')}</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--slate);flex-wrap:wrap;gap:6px;">
+              <span>🔒 <strong style="color:var(--charcoal);">${parseFloat(bet.amountEth).toFixed(4)} ETH</strong> (encrypted)</span>
+              <span>${escapeHtml(date)}</span>
+              ${bet.txHash ? `<a href="https://sepolia.etherscan.io/tx/${bet.txHash}" target="_blank" rel="noopener" style="color:var(--amber);text-decoration:none;">${escapeHtml(txShort)} ↗</a>` : ''}
+            </div>
+          </div>`;
+        });
+        html += '</div>';
+      }
+      document.getElementById('legalTitle').textContent = 'My Positions';
+      document.getElementById('legalContent').innerHTML = html;
+      document.getElementById('legalModal').classList.add('active');
+    }
+
     const legalContent = {
       privacy: { title: 'Privacy Policy', body: 'ShieldOdds does not collect, store, or process personal data. All interactions occur directly between your wallet and the smart contract on the Sepolia testnet. No cookies, analytics, or tracking scripts are used on this site.' },
       terms: { title: 'Terms of Use', body: 'ShieldOdds is a testnet application provided as-is for experimental and educational purposes. By using this application, you acknowledge that you are interacting with smart contracts on the Sepolia testnet using testnet ETH with no real monetary value. Use at your own risk.' },
@@ -1938,6 +2173,11 @@
     });
     document.getElementById('legalModal').addEventListener('click', (e) => {
       if (e.target === e.currentTarget) e.currentTarget.classList.remove('active');
+    });
+    // Close wallet dropdown when clicking anywhere outside it
+    document.addEventListener('click', (e) => {
+      const wrapper = document.getElementById('walletDropdownWrapper');
+      if (wrapper && !wrapper.contains(e.target)) closeWalletDropdown();
     });
     document.getElementById('withdrawModal').addEventListener('click', (e) => {
       if (e.target === e.currentTarget) closeWithdrawModal();
