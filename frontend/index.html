@@ -9,8 +9,17 @@
   <link rel="apple-touch-icon" href="assets/favicon-180.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <!-- Preconnect to CDN and Zama gateway so TCP/TLS handshakes happen before JS runs -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="preconnect" href="https://gateway.sepolia.zama.ai" crossorigin />
+  <link rel="dns-prefetch" href="https://relayer.testnet.zama.org" />
+  <!-- Preload WASM binaries so they are in the browser cache when fhevmjs requests them.
+       tfhe_bg.wasm is 2.83 MB — without preload the browser only discovers it after
+       lib/web.js is parsed, adding a full round-trip of latency. -->
+  <link rel="preload" as="fetch" href="https://cdn.jsdelivr.net/npm/fhevmjs@0.6.2/lib/tfhe_bg.wasm" crossorigin="anonymous" />
+  <link rel="preload" as="fetch" href="https://cdn.jsdelivr.net/npm/fhevmjs@0.6.2/lib/kms_lib_bg.wasm" crossorigin="anonymous" />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Inter:wght@300..700&display=swap" rel="stylesheet" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js" crossorigin="anonymous"></script>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     :root {
@@ -455,6 +464,11 @@
           <!-- Loading/progress state -->
           <div class="bal-loading" id="balanceLoading" style="display:none;">
             <div class="bal-steps">
+              <!-- Pre-step: shown only while fhevmjs WASM is still downloading/initializing -->
+              <span class="bal-step" id="bstep-fhe" style="display:none;">
+                <span class="step-icon">○</span>Initializing FHE
+              </span>
+              <span class="bal-step-sep" id="bstep-fhe-sep" style="display:none;">›</span>
               <span class="bal-step" id="bstep-sign">
                 <span class="step-icon">○</span>Requesting signature
               </span>
@@ -812,19 +826,34 @@
 
     // ── Balance loading step progress UI ──────────────────────────────────────
 
+    // Track gateway elapsed time so we can display "Contacting Zama gateway (12s)…"
+    let _gatewayTimerInterval = null;
+    let _gatewayStartTime = 0;
+
+    function _stopGatewayTimer() {
+      if (_gatewayTimerInterval) { clearInterval(_gatewayTimerInterval); _gatewayTimerInterval = null; }
+    }
+
+    function _startGatewayTimer() {
+      _stopGatewayTimer();
+      _gatewayStartTime = Date.now();
+      _gatewayTimerInterval = setInterval(() => {
+        const el = document.getElementById('bstep-gateway');
+        const elapsed = Math.round((Date.now() - _gatewayStartTime) / 1000);
+        if (el) el.childNodes[1].textContent = `Contacting Zama gateway (${elapsed}s)`;
+      }, 1000);
+    }
+
     function setBalanceStep(step) {
-      // step: 'loading' | 'sign' | 'gateway' | 'decrypt' | 'done' | 'error' | 'zero'
+      // Steps: 'fhe-init' | 'sign' | 'gateway' | 'decrypt' | 'done' | 'error'
       const display = document.getElementById('balanceDisplay');
       const loading = document.getElementById('balanceLoading');
       const error   = document.getElementById('balanceError');
       const hint    = document.getElementById('balanceHint');
       if (!display || !loading || !error) return;
 
-      const steps = ['sign', 'gateway', 'decrypt'];
-      const stepOrder = { sign: 0, gateway: 1, decrypt: 2 };
-      const currentIdx = stepOrder[step] ?? -1;
-
-      if (step === 'done' || step === 'zero') {
+      if (step === 'done') {
+        _stopGatewayTimer();
         loading.style.display = 'none';
         error.style.display = 'none';
         display.style.display = '';
@@ -832,62 +861,106 @@
       }
 
       if (step === 'error') {
+        _stopGatewayTimer();
         loading.style.display = 'none';
         display.style.display = 'none';
         error.style.display = '';
         return;
       }
 
-      // Show loading indicator
+      // Show loading panel
       display.style.display = 'none';
       error.style.display = 'none';
       loading.style.display = '';
 
-      steps.forEach((s, idx) => {
+      // ── FHE pre-step visibility ─────────────────────────────────────────────
+      // BUG FIX: The old code showed "Requesting signature" with a spinner while
+      // the 2.83 MB WASM was still downloading. No wallet popup had appeared yet,
+      // making users think the product was frozen. Now we show "Initializing FHE"
+      // during WASM init and only advance to "Requesting signature" when the
+      // wallet prompt is genuinely about to appear.
+      const fheEl    = document.getElementById('bstep-fhe');
+      const fheSep   = document.getElementById('bstep-fhe-sep');
+      const isFheInit = step === 'fhe-init';
+      if (fheEl)  { fheEl.style.display  = isFheInit ? '' : 'none'; }
+      if (fheSep) { fheSep.style.display = isFheInit ? '' : 'none'; }
+
+      // ── Main steps ──────────────────────────────────────────────────────────
+      // For 'fhe-init': highlight only the fhe pre-step, leave others greyed
+      // For 'sign/gateway/decrypt': mark completed/active/pending appropriately
+      const mainSteps = ['sign', 'gateway', 'decrypt'];
+      const mainOrder = { sign: 0, gateway: 1, decrypt: 2 };
+      const currentIdx = isFheInit ? -1 : (mainOrder[step] ?? -1);
+
+      mainSteps.forEach((s, idx) => {
         const el = document.getElementById(`bstep-${s}`);
         if (!el) return;
         el.className = 'bal-step';
-        const icon = el.querySelector('.step-icon');
+
+        // Locate the icon — either the .step-icon span or the .bal-spinner div
+        let icon = el.querySelector('.step-icon, .bal-spinner');
+
         if (idx < currentIdx) {
           el.classList.add('done');
-          if (icon) icon.textContent = '✓';
+          if (icon) { icon.className = 'step-icon'; icon.textContent = '✓'; }
         } else if (idx === currentIdx) {
           el.classList.add('active');
-          if (icon) {
-            // Replace icon span with spinner for active step
-            icon.innerHTML = '';
-            icon.className = 'bal-spinner';
-          }
+          if (icon) { icon.innerHTML = ''; icon.className = 'bal-spinner'; }
+          if (s === 'gateway') _startGatewayTimer();
+          else _stopGatewayTimer();
         } else {
           if (icon) { icon.className = 'step-icon'; icon.textContent = '○'; }
         }
       });
 
-      // Contextual hint text per step
+      // Fhe pre-step gets its own spinner treatment
+      if (isFheInit && fheEl) {
+        fheEl.className = 'bal-step active';
+        let icon = fheEl.querySelector('.step-icon, .bal-spinner');
+        if (icon) { icon.innerHTML = ''; icon.className = 'bal-spinner'; }
+        _stopGatewayTimer();
+      }
+
+      // ── Hint text per step ──────────────────────────────────────────────────
       if (hint) {
         const hints = {
-          sign:    'Check your wallet — a signature request is pending (no gas required)',
-          gateway: 'Decrypting your private balance via FHE — this can take up to 30 seconds',
-          decrypt: 'Almost done — computing your plaintext balance from the FHE ciphertext…',
+          'fhe-init': 'Downloading FHE cryptographic library (~3 MB) — only needed on first load',
+          sign:       'Check your wallet — a signature request is pending (no gas cost)',
+          gateway:    'Decrypting your private balance via FHE — this can take up to 30 seconds',
+          decrypt:    'Almost done — computing your plaintext balance locally…',
         };
-        hint.textContent = hints[step] || 'Decrypting your private balance via FHE — this can take up to 30 seconds';
+        hint.textContent = hints[step] ?? hints.gateway;
       }
     }
 
     function setBalanceError(msg) {
+      _stopGatewayTimer();
       const error = document.getElementById('balanceError');
       if (error) error.textContent = msg;
       setBalanceStep('error');
     }
 
+    // Wrap a promise with a timeout; rejects with a TimeoutError after `ms` ms.
+    function withTimeout(promise, ms, label) {
+      let timer;
+      const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Timeout after ${ms / 1000}s: ${label}`)), ms);
+      });
+      return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+    }
+
     async function loadRealBalance() {
       if (!contract || !userAddress || !window.fhevmInstance || !window.fhevmReady) return;
       try {
-        // Fetch the handle first (cheap RPC call, no user interaction)
-        const balanceHandle = await readContract.getBalanceHandle(userAddress);
+        // Fetch the handle first (cheap RPC call, no user interaction needed)
+        const balanceHandle = await withTimeout(
+          readContract.getBalanceHandle(userAddress),
+          15000, 'getBalanceHandle'
+        );
         if (!balanceHandle || balanceHandle === ethers.constants.HashZero) {
           localBalance = 0;
           localBalanceLoaded = true;
+          setBalanceStep('done');
           updateBalanceDisplay();
           return;
         }
@@ -895,58 +968,50 @@
         // ── Step 1: Keypair + signature (try sessionStorage cache first) ──────
         let session = null;
         if (fhevmKeypair) {
-          // In-memory keypair is available — check if we also have a cached signature
           session = loadFheSession(userAddress);
-          // Only reuse if the cached keypair matches the in-memory one
-          if (session && session.publicKey !== fhevmKeypair.publicKey) {
-            session = null; // stale — different keypair
-          }
+          if (session && session.publicKey !== fhevmKeypair.publicKey) session = null;
         } else {
           session = loadFheSession(userAddress);
-          if (session) {
-            fhevmKeypair = { publicKey: session.publicKey, privateKey: session.privateKey };
-          }
+          if (session) fhevmKeypair = { publicKey: session.publicKey, privateKey: session.privateKey };
         }
 
         let signature;
         if (session && session.signature) {
-          // Cache hit — skip the wallet prompt entirely
+          // Cache hit — skip wallet prompt, go straight to gateway
           signature = session.signature;
-          console.log('fhEVM: reusing cached keypair + signature for', userAddress.slice(0, 8));
-          // Jump straight to gateway step
+          console.log('fhEVM: using cached session for', userAddress.slice(0, 8) + '…');
           setBalanceStep('gateway');
         } else {
-          // Cache miss — need wallet signature
-          if (!fhevmKeypair) {
-            fhevmKeypair = window.fhevmInstance.generateKeypair();
-          }
-          setBalanceStep('sign');
+          // Cache miss — must prompt wallet for EIP-712 signature
+          if (!fhevmKeypair) fhevmKeypair = window.fhevmInstance.generateKeypair();
+          setBalanceStep('sign'); // BUG FIX: only show "Requesting signature" HERE,
+                                  // when the wallet popup is genuinely about to appear
           const eip712 = window.fhevmInstance.createEIP712(fhevmKeypair.publicKey, CONTRACT_ADDRESS);
           signature = await signer._signTypedData(
             eip712.domain,
             { Reencrypt: eip712.types.Reencrypt },
             eip712.message
           );
-          // Persist to sessionStorage so this tab won't re-prompt
           saveFheSession(userAddress, fhevmKeypair.publicKey, fhevmKeypair.privateKey, signature);
           setBalanceStep('gateway');
         }
 
-        // ── Step 2: Gateway re-encryption request ────────────────────────────
-        // (step is already set to 'gateway' above)
-
-        // BUG FIX (from prior PR): balanceHandle is a bytes32 hex string; fhevmjs
-        // reencrypt() expects BigInt so it can call .toString(16) on it.
-        const decrypted = await window.fhevmInstance.reencrypt(
-          BigInt(balanceHandle),
-          fhevmKeypair.privateKey,
-          fhevmKeypair.publicKey,
-          signature.replace('0x', ''),
-          CONTRACT_ADDRESS,
-          userAddress
+        // ── Step 2: Zama gateway re-encryption (network-bound, can be 5–60s) ──
+        // BUG FIX: wrap in a 90-second timeout so the spinner never runs forever.
+        // Previously: no timeout → gateway hang = infinite spinner with no recovery.
+        const decrypted = await withTimeout(
+          window.fhevmInstance.reencrypt(
+            BigInt(balanceHandle), // BUG FIX: must be BigInt — see prior PR
+            fhevmKeypair.privateKey,
+            fhevmKeypair.publicKey,
+            signature.replace('0x', ''),
+            CONTRACT_ADDRESS,
+            userAddress
+          ),
+          90000, 'Zama gateway reencrypt'
         );
 
-        // ── Step 3: WASM decryption (instant, but show step for completeness) ─
+        // ── Step 3: Local WASM decryption (instant) ───────────────────────────
         setBalanceStep('decrypt');
         localBalance = parseFloat(ethers.utils.formatEther(decrypted.toString()));
         localBalanceLoaded = true;
@@ -954,13 +1019,17 @@
         updateBalanceDisplay();
       } catch (err) {
         console.error('loadRealBalance error:', err);
+        _stopGatewayTimer();
         if (!localBalanceLoaded) {
-          // Show a user-visible error with a retry button
-          setBalanceError('Could not decrypt — ');
+          const isTimeout = err.message && err.message.startsWith('Timeout');
+          const msg = isTimeout
+            ? 'Gateway timed out'
+            : (err.message?.includes('not authorized') ? 'Not authorized — try reconnecting' : 'Could not decrypt');
           const error = document.getElementById('balanceError');
           if (error) {
-            error.innerHTML = 'Could not decrypt balance &nbsp;<button onclick="loadRealBalance()" style="font-size:11px;padding:2px 8px;border:1px solid var(--sand);border-radius:6px;background:white;cursor:pointer;color:var(--amber);">Retry</button>';
+            error.innerHTML = `${msg} &nbsp;<button onclick="loadRealBalance()" style="font-size:11px;padding:2px 8px;border:1px solid var(--sand);border-radius:6px;background:white;cursor:pointer;color:var(--amber);">Retry</button>`;
           }
+          setBalanceStep('error');
         }
       }
     }
@@ -977,16 +1046,19 @@
       if (!section || !userAddress) return;
       section.style.display = 'block';
       if (window.fhevmReady) {
-        // Check if we already have a cached session — if so, we can start at 'gateway' step
+        // FHE is ready — determine whether we'll need a wallet prompt
         const session = loadFheSession(userAddress);
         setBalanceStep(session ? 'gateway' : 'sign');
         loadRealBalance();
       } else if (window.fhevmFailed) {
         setBalanceError('Encryption unavailable');
       } else {
-        // FHE not yet ready — show first step as pending (no spinner, just waiting)
-        setBalanceStep('sign');
-        // Will be triggered by 'fheReady' event listener
+        // BUG FIX: FHE WASM is still downloading. Previously showed 'sign' here
+        // (spinner + "Check your wallet") even though no wallet popup was coming —
+        // users saw that message for 30+ seconds with nothing happening in the wallet.
+        // Now we show 'fhe-init' so users understand the real cause of the wait.
+        setBalanceStep('fhe-init');
+        // loadRealBalance() is called from the 'fheReady' event listener
       }
     }
 
@@ -1722,8 +1794,11 @@
 
     document.addEventListener('fheReady', () => {
       updatePlaceBetBtn();
-      // If balance section is visible, kick off loading (showBalanceBar already set the step UI)
-      if (userAddress && window.fhevmInstance && document.getElementById('balance-section').style.display !== 'none') {
+      const balSection = document.getElementById('balance-section');
+      if (userAddress && window.fhevmInstance && balSection && balSection.style.display !== 'none') {
+        // Advance from 'fhe-init' (or wherever we are) to the real first step
+        const session = loadFheSession(userAddress);
+        setBalanceStep(session ? 'gateway' : 'sign');
         loadRealBalance();
       }
     });
@@ -1735,9 +1810,10 @@
 
     document.addEventListener('fheRetrying', (e) => {
       updatePlaceBetBtn();
-      // Keep showing the sign step with a "retrying" hint while FHE is retrying init
+      // Stay on 'fhe-init' step and update hint to show retry count
+      setBalanceStep('fhe-init');
       const hint = document.getElementById('balanceHint');
-      if (hint) hint.textContent = `FHE init retrying (${e.detail.attempt}/${3})… please wait`;
+      if (hint) hint.textContent = `FHE library retrying (attempt ${e.detail.attempt + 1}/${4})… please wait`;
     });
 
     document.addEventListener('DOMContentLoaded', () => {
