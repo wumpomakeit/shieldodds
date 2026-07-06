@@ -462,6 +462,7 @@
       <div class="balance-bar">
         <div class="balance-info">
           <span class="balance-label">🔐 Your Encrypted Balance</span>
+          <span class="balance-note" id="balanceAddressNote" style="font-size:11px;color:var(--light-gray);display:none;"><!-- filled by JS --></span>
           <!-- Loaded state -->
           <span class="balance-value" id="balanceDisplay" style="display:none;">—</span>
           <!-- Loading/progress state -->
@@ -794,7 +795,10 @@
         }
         provider = new ethers.providers.Web3Provider(window.ethereum);
         signer = provider.getSigner();
-        userAddress = accounts[0];
+        // Normalize to EIP-55 checksummed format. wallet APIs return lowercase hex;
+        // @zama-fhe/relayer-sdk's createEncryptedInput() requires isChecksummedAddress()
+        // to pass (getAddress(value) === value), which fails on lowercase input.
+        userAddress = ethers.utils.getAddress(accounts[0]);
         contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
         const btn = document.getElementById('connectBtn');
         btn.classList.add('connected');
@@ -821,8 +825,7 @@
           fhevmKeypair = null; // clear stale keypair — keypairs are address-scoped
         } else {
           const prevAddress = userAddress;
-          userAddress = accounts[0];
-          // Clear session cache for the old address so new account gets a fresh keypair+sig
+          userAddress = ethers.utils.getAddress(accounts[0]); // always checksummed
           if (prevAddress && prevAddress.toLowerCase() !== userAddress.toLowerCase()) {
             clearFheSession(prevAddress);
           }
@@ -1207,6 +1210,12 @@
       const section = document.getElementById('balance-section');
       if (!section || !userAddress) return;
       section.style.display = 'block';
+      // Show which address this balance belongs to — clarifies cross-wallet confusion
+      const note = document.getElementById('balanceAddressNote');
+      if (note) {
+        note.textContent = userAddress.slice(0, 6) + '…' + userAddress.slice(-4);
+        note.style.display = '';
+      }
       if (window.fhevmReady) {
         // FHE is ready — determine whether we'll need a wallet prompt
         const session = loadFheSession(userAddress);
