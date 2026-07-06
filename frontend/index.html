@@ -18,7 +18,7 @@
   <link rel="preload" as="fetch" href="/fhevm/tfhe_bg.wasm" crossorigin="anonymous" />
   <link rel="preload" as="fetch" href="/fhevm/kms_lib_bg.wasm" crossorigin="anonymous" />
   <!-- Preload the JS bundle itself so it's ready when the module script parses. -->
-  <link rel="modulepreload" href="/fhevm/fhevm-browser.min.js" />
+  <link rel="modulepreload" href="/fhevm/relayer-browser.min.js" />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Inter:wght@300..700&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js" crossorigin="anonymous"></script>
   <style>
@@ -617,33 +617,24 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    // ── Self-hosted fhevmjs browser bundle ───────────────────────────────────
+    // ── Self-hosted @zama-fhe/relayer-sdk browser bundle ─────────────────────
     //
-    // WHY self-hosted (not CDN):
-    //   fhevmjs@0.6.2/lib/web.js has TOP-LEVEL bare import specifiers:
-    //     import from 'ethers', 'keccak', 'bigint-buffer', 'wasm-feature-detect'
-    //   Without an import map the browser resolves them as relative URLs
-    //   (/ethers, /keccak, …) which Vercel returns as 404s — but the module
-    //   loader WAITS for those fetches, so the whole module load hangs
-    //   indefinitely (minutes to hours), never reaching our try/catch.
-    //
-    //   The self-hosted bundle at /fhevm/fhevm-browser.min.js was built with
-    //   esbuild, inlining ethers@6, js-sha3 (keccak shim), wasm-feature-detect,
-    //   and a bigint-buffer shim. WASM files (tfhe_bg.wasm, kms_lib_bg.wasm)
-    //   and the worker helper (workerHelpers.worker.js) are served alongside it
-    //   at /fhevm/* so they are same-origin (required by COOP/COEP headers).
-    import { initFhevm, createInstance } from '/fhevm/fhevm-browser.min.js';
+    // Migration from fhevmjs@0.6.2:
+    //   gateway.sepolia.zama.ai is PERMANENTLY DOWN (DNS failure, exit code 6).
+    //   Every createInstance/reencrypt/publicDecrypt call was hitting a dead domain.
+    //   The relayer-sdk uses relayer.testnet.zama.org which is live.
+    //   API changes: initFhevm→initSDK, reencrypt→userDecrypt (handles/contractAddresses
+    //   are now arrays + startTimestamp/durationDays params), publicDecrypt added.
+    import { initSDK, createInstance, SepoliaConfig } from '/fhevm/relayer-browser.min.js';
 
     window.fhevmInstance = null;
     window.fhevmReady = false;
     window.fhevmFailed = false;
 
     const MAX_RETRIES = 3;
-    const TIMEOUT_INIT_WASM_MS  = 25000; // loading + compiling 3 MB of WASM
-    const TIMEOUT_CREATE_INS_MS = 25000; // 3 serial RPC/gateway calls inside createInstance
+    const TIMEOUT_INIT_WASM_MS  = 30000; // 4.6 MB tfhe_bg.wasm + 634 KB kms_lib_bg.wasm
+    const TIMEOUT_CREATE_INS_MS = 30000; // fetches TFHE public key from S3 + KMS data
 
-    // Self-contained timeout helper (the one in the regular script is available
-    // on window, but define locally to be explicit about the module boundary).
     function moduleTimeout(promise, ms, label) {
       let timer;
       return Promise.race([
@@ -668,36 +659,33 @@
         ? 'https://ethereum-sepolia-rpc.publicnode.com'
         : window.location.origin + '/api/rpc';
 
-      // Explicit WASM paths so initFhevm() doesn't depend on import.meta.url
-      // resolution (which would point at the bundle URL, not the .wasm files).
       const WASM_BASE = window.location.origin + '/fhevm/';
 
       try {
-        // ── Step 1: load and compile WASM (tfhe_bg.wasm + kms_lib_bg.wasm) ──
+        // ── Step 1: load and compile WASM ───────────────────────────────────
         let t = Date.now();
-        console.log(`[fhEVM] initFhevm() start — attempt ${retryCount + 1}/${MAX_RETRIES + 1}`);
+        console.log(`[fhEVM] initSDK() start — attempt ${retryCount + 1}/${MAX_RETRIES + 1}`);
         await moduleTimeout(
-          initFhevm({
+          initSDK({
             tfheParams: WASM_BASE + 'tfhe_bg.wasm',
             kmsParams:  WASM_BASE + 'kms_lib_bg.wasm',
           }),
           TIMEOUT_INIT_WASM_MS,
-          'initFhevm (WASM load/compile)'
+          'initSDK (WASM load/compile)'
         );
-        console.log(`[fhEVM] initFhevm() done — ${Date.now() - t}ms`);
+        console.log(`[fhEVM] initSDK() done — ${Date.now() - t}ms`);
 
-        // ── Step 2: createInstance (fetches TFHE public key + KMS signers) ──
+        // ── Step 2: createInstance (fetches TFHE public key from relayer + S3) ──
         t = Date.now();
         console.log('[fhEVM] createInstance() start');
         const instance = await moduleTimeout(
           createInstance({
-            kmsContractAddress: '0xbE0E383937d564D7FF0BC3b46c51f0bF8d5C311A',
-            aclContractAddress: '0xf0Ffdc93b7E186bC2f8CB3dAA75D86d1930A433D',
-            networkUrl: rpcForFhe,
-            gatewayUrl: 'https://gateway.sepolia.zama.ai/',
+            ...SepoliaConfig,              // addresses, chainId 11155111, gatewayChainId 10901
+            network: rpcForFhe,            // RPC for on-chain calls (formerly 'networkUrl')
+            relayerUrl: 'https://relayer.testnet.zama.org', // replaces dead gateway.sepolia.zama.ai
           }),
           TIMEOUT_CREATE_INS_MS,
-          'createInstance (on-chain key fetch)'
+          'createInstance (relayer key fetch)'
         );
         console.log(`[fhEVM] createInstance() done — ${Date.now() - t}ms`);
 
@@ -869,9 +857,13 @@
       return null;
     }
 
-    function saveFheSession(address, publicKey, privateKey, signature) {
+    function saveFheSession(address, publicKey, privateKey, signature, startTimestamp, durationDays) {
       try {
-        sessionStorage.setItem(fheSessionKey(address), JSON.stringify({ publicKey, privateKey, signature }));
+        sessionStorage.setItem(fheSessionKey(address), JSON.stringify({
+          publicKey, privateKey, signature,
+          startTimestamp: Number(startTimestamp),
+          durationDays:   Number(durationDays),
+        }));
       } catch (_) {}
     }
 
@@ -923,30 +915,38 @@
         if (fhevmKeypair && session && session.publicKey !== fhevmKeypair.publicKey) session = null;
         if (!fhevmKeypair && session) fhevmKeypair = { publicKey: session.publicKey, privateKey: session.privateKey };
 
-        let signature;
+        let signature, startTimestamp, durationDays;
         if (session && session.signature) {
-          signature = session.signature;
+          ({ signature, startTimestamp, durationDays } = session);
         } else {
           if (!fhevmKeypair) fhevmKeypair = window.fhevmInstance.generateKeypair();
-          const eip712 = window.fhevmInstance.createEIP712(fhevmKeypair.publicKey, CONTRACT_ADDRESS);
-          signature = await signer._signTypedData(
-            eip712.domain, { Reencrypt: eip712.types.Reencrypt }, eip712.message
+          startTimestamp = Math.floor(Date.now() / 1000);
+          durationDays   = 7;
+          const eip712 = window.fhevmInstance.createEIP712(
+            fhevmKeypair.publicKey, [CONTRACT_ADDRESS], startTimestamp, durationDays
           );
-          saveFheSession(userAddress, fhevmKeypair.publicKey, fhevmKeypair.privateKey, signature);
+          signature = await signer._signTypedData(
+            eip712.domain,
+            { UserDecryptRequestVerification: eip712.types.UserDecryptRequestVerification },
+            eip712.message
+          );
+          saveFheSession(userAddress, fhevmKeypair.publicKey, fhevmKeypair.privateKey, signature, startTimestamp, durationDays);
         }
 
         if (token !== _reconcileToken) return;
 
         const decrypted = await withTimeout(
-          window.fhevmInstance.reencrypt(
-            BigInt(balanceHandle),
+          window.fhevmInstance.userDecrypt(
+            [BigInt(balanceHandle)],
             fhevmKeypair.privateKey,
             fhevmKeypair.publicKey,
             signature.replace('0x', ''),
-            CONTRACT_ADDRESS,
-            userAddress
+            [CONTRACT_ADDRESS],
+            userAddress,
+            startTimestamp,
+            durationDays
           ),
-          90000, 'background reconcile reencrypt'
+          90000, 'background reconcile userDecrypt'
         );
 
         if (token !== _reconcileToken) return; // superseded by a newer reconcile
@@ -1118,43 +1118,55 @@
           if (session) fhevmKeypair = { publicKey: session.publicKey, privateKey: session.privateKey };
         }
 
-        let signature;
+        let signature, startTimestamp, durationDays;
         if (session && session.signature) {
-          // Cache hit — skip wallet prompt, go straight to gateway
-          signature = session.signature;
-          console.log('fhEVM: using cached session for', userAddress.slice(0, 8) + '…');
+          // Cache hit — skip wallet prompt
+          ({ signature, startTimestamp, durationDays } = session);
+          console.log('fhEVM: reusing cached session for', userAddress.slice(0, 8) + '…');
           setBalanceStep('gateway');
         } else {
           // Cache miss — must prompt wallet for EIP-712 signature
           if (!fhevmKeypair) fhevmKeypair = window.fhevmInstance.generateKeypair();
-          setBalanceStep('sign'); // BUG FIX: only show "Requesting signature" HERE,
-                                  // when the wallet popup is genuinely about to appear
-          const eip712 = window.fhevmInstance.createEIP712(fhevmKeypair.publicKey, CONTRACT_ADDRESS);
+          setBalanceStep('sign');
+
+          // relayer-sdk: startTimestamp + durationDays must be regular JS numbers
+          startTimestamp = Math.floor(Date.now() / 1000);
+          durationDays   = 7;
+
+          // NEW API: createEIP712(pubKey, contractAddresses[], startTs, durationDays)
+          // Type name changed: 'Reencrypt' → 'UserDecryptRequestVerification'
+          const eip712 = window.fhevmInstance.createEIP712(
+            fhevmKeypair.publicKey,
+            [CONTRACT_ADDRESS],
+            startTimestamp,
+            durationDays
+          );
           signature = await signer._signTypedData(
             eip712.domain,
-            { Reencrypt: eip712.types.Reencrypt },
+            { UserDecryptRequestVerification: eip712.types.UserDecryptRequestVerification },
             eip712.message
           );
-          saveFheSession(userAddress, fhevmKeypair.publicKey, fhevmKeypair.privateKey, signature);
+          saveFheSession(userAddress, fhevmKeypair.publicKey, fhevmKeypair.privateKey, signature, startTimestamp, durationDays);
           setBalanceStep('gateway');
         }
 
-        // ── Step 2: Zama gateway re-encryption (network-bound, can be 5–60s) ──
-        // BUG FIX: wrap in a 90-second timeout so the spinner never runs forever.
-        // Previously: no timeout → gateway hang = infinite spinner with no recovery.
+        // ── Step 2: relayer userDecrypt (replaces old dead gateway reencrypt) ──
+        // NEW API: userDecrypt(handles[], privKey, pubKey, sig, contractAddrs[], userAddr, startTs, durationDays)
         const decrypted = await withTimeout(
-          window.fhevmInstance.reencrypt(
-            BigInt(balanceHandle), // BUG FIX: must be BigInt — see prior PR
+          window.fhevmInstance.userDecrypt(
+            [BigInt(balanceHandle)],
             fhevmKeypair.privateKey,
             fhevmKeypair.publicKey,
             signature.replace('0x', ''),
-            CONTRACT_ADDRESS,
-            userAddress
+            [CONTRACT_ADDRESS],
+            userAddress,
+            startTimestamp,
+            durationDays
           ),
-          90000, 'Zama gateway reencrypt'
+          90000, 'relayer userDecrypt'
         );
 
-        // ── Step 3: Local WASM decryption (instant) ───────────────────────────
+        // ── Step 3: local computation (instant) ──────────────────────────────
         setBalanceStep('decrypt');
         localBalance = parseFloat(ethers.utils.formatEther(decrypted.toString()));
         localBalanceLoaded = true;
@@ -1166,8 +1178,10 @@
         if (!localBalanceLoaded) {
           const isTimeout = err.message && err.message.startsWith('Timeout');
           const msg = isTimeout
-            ? 'Gateway timed out'
-            : (err.message?.includes('not authorized') ? 'Not authorized — try reconnecting' : 'Could not decrypt');
+            ? 'Relayer timed out'
+            : (err.message?.includes('not authorized') || err.message?.includes('not_ready')
+               ? 'Not authorized — try reconnecting'
+               : 'Could not decrypt');
           const error = document.getElementById('balanceError');
           if (error) {
             error.innerHTML = `${msg} &nbsp;<button onclick="loadRealBalance()" style="font-size:11px;padding:2px 8px;border:1px solid var(--sand);border-radius:6px;background:white;cursor:pointer;color:var(--amber);">Retry</button>`;
@@ -1823,62 +1837,44 @@
         }
 
         const successHandle = req.successHandle;
-        // Convert to 32-byte hex without 0x prefix for gateway
-        const handleHex = successHandle.slice(2).padStart(64, '0');
 
-        // 2. Query the Zama relayer for the public decryption
-        // Try the newer relayer URL first, then fall back to old gateway
-        let gatewayResult = null;
-        const endpoints = [
-          `${ZAMA_RELAYER_URL}/public-decrypt`,
-          `${ZAMA_GATEWAY_URL}public-decrypt`,
-        ];
+        if (btn) btn.textContent = '⏳ Fetching KMS decryption…';
 
-        for (const endpoint of endpoints) {
-          try {
-            const resp = await fetch(endpoint, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                ciphertextHandles: [`0x${handleHex}`],
-                extraData: '0x00',
-              }),
-            });
-            if (resp.ok) {
-              const json = await resp.json();
-              // relayer-sdk format: { response: [{ signatures, decrypted_value }] }
-              if (json.response && Array.isArray(json.response) && json.response.length > 0) {
-                gatewayResult = json.response[0];
-                break;
-              }
-            }
-          } catch (e) {
-            console.warn(`Gateway endpoint ${endpoint} failed:`, e.message);
-          }
+        // 2. Use relayer-sdk publicDecrypt to get the KMS-signed proof
+        // This calls POST relayer.testnet.zama.org/v2/public-decrypt internally
+        // and returns { clearValues, abiEncodedClearValues, decryptionProof }
+        if (!window.fhevmInstance || !window.fhevmReady) {
+          showToast('FHE not ready — please wait for initialization then retry', true);
+          if (btn) { btn.disabled = false; btn.textContent = origText; }
+          return;
         }
 
-        if (!gatewayResult) {
-          showToast('KMS proof not available yet — the gateway is still processing. Try again in a moment.', true);
+        let publicDecryptResult;
+        try {
+          publicDecryptResult = await withTimeout(
+            window.fhevmInstance.publicDecrypt([successHandle]),
+            60000, 'publicDecrypt'
+          );
+        } catch (pdErr) {
+          const msg = pdErr.message ?? '';
+          if (msg.includes('not_ready') || msg.includes('not ready')) {
+            showToast('KMS is still processing — please wait a few seconds and retry.', true);
+          } else if (msg.startsWith('Timeout')) {
+            showToast('Relayer timed out fetching KMS proof — try again.', true);
+          } else {
+            showToast(`Could not get KMS proof: ${msg.slice(0, 80)}`, true);
+          }
           if (btn) { btn.disabled = false; btn.textContent = origText; }
           return;
         }
 
         if (btn) btn.textContent = '⏳ Submitting proof…';
 
-        // 3. Build abiEncodedCleartext and decryptionProof
-        // decrypted_value is the hex-encoded cleartext bool (0 or 1 as 32 bytes)
-        const decryptedValue = gatewayResult.decrypted_value || '0x';
-        // ABI-encode the bool as 32 bytes (padded uint256)
-        const abiEncodedCleartext = decryptedValue.startsWith('0x')
-          ? ethers.utils.hexZeroPad(decryptedValue, 32)
-          : ethers.utils.hexZeroPad('0x' + decryptedValue, 32);
+        // publicDecrypt returns { clearValues, abiEncodedClearValues, decryptionProof }
+        const { abiEncodedClearValues, decryptionProof } = publicDecryptResult;
 
-        // decryptionProof: ABI-encode the signatures array from the KMS response
-        const sigs = (gatewayResult.signatures || []).map(s => s.startsWith('0x') ? s : '0x' + s);
-        const decryptionProof = ethers.utils.defaultAbiCoder.encode(['bytes[]'], [sigs]);
-
-        // 4. Call completeWithdrawal on-chain
-        const tx = await contract.completeWithdrawal(requestId, abiEncodedCleartext, decryptionProof);
+        // 3. Call completeWithdrawal on-chain with the KMS-verified proof
+        const tx = await contract.completeWithdrawal(requestId, abiEncodedClearValues, decryptionProof);
         showToast('Completion transaction submitted — confirming…');
         await tx.wait();
 
