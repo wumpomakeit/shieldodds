@@ -24,17 +24,18 @@
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     :root {
-      --cream:#FFF8F0; --cream-mid:#FFF1E0; --cream-dark:#F5E6D3; --sand:#EDD9C0;
-      --amber:#E8873A; --amber-dark:#D4722A; --amber-light:#F4A261; --coral:#E76F51;
-      --charcoal:#1A1A1A; --ink:#2D2D2D; --slate:#6B6B6B; --light-gray:#A8A8A8;
-      --yes-green:#4CAF50; --yes-bg:#E8F5E9; --no-red:#E53935; --no-bg:#FFEBEE;
-      --radius:16px; --radius-sm:10px; --max-width:1200px;
+      --cream:#FFF8F0; --cream-mid:#FFF1E0; --cream-dark:#F0E0CC; --sand:#E5CDB0;
+      --amber:#E8873A; --amber-dark:#C96820; --amber-light:#F4A261; --coral:#E76F51;
+      --charcoal:#111111; --ink:#222222; --slate:#555555; --light-gray:#999999;
+      --yes-green:#22863a; --yes-bg:#F0FFF4; --no-red:#C0392B; --no-bg:#FFF5F5;
+      --radius:14px; --radius-sm:9px; --max-width:1200px;
+      --border: rgba(0,0,0,0.09);
     }
     html { scroll-behavior: smooth; }
     body { font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; background:var(--cream); color:var(--ink); line-height:1.6; -webkit-font-smoothing:antialiased; }
     .navbar-wrap { position:fixed; top:16px; left:0; right:0; z-index:1000; display:flex; justify-content:center; padding:0 clamp(16px,4vw,32px); pointer-events:none; transition: transform .35s cubic-bezier(.4,0,.2,1), opacity .35s ease; }
     .navbar-wrap.nav-hidden { transform: translateY(-120%); opacity:0; }
-    .navbar { pointer-events:auto; max-width:820px; width:100%; background:rgba(255,252,247,0.92); border:1px solid rgba(0,0,0,0.06); border-radius:22px; padding:0 8px 0 16px; box-shadow:0 2px 8px rgba(0,0,0,0.04), 0 8px 32px rgba(0,0,0,0.07); }
+    .navbar { pointer-events:auto; max-width:820px; width:100%; background:rgba(255,252,247,0.96); border:1px solid var(--border); border-radius:14px; padding:0 8px 0 16px; box-shadow:0 1px 4px rgba(0,0,0,0.05), 0 6px 24px rgba(0,0,0,0.06); backdrop-filter:blur(8px); }
     .navbar-inner { display:flex; align-items:center; justify-content:space-between; height:56px; gap:8px; }
     .logo { display:flex; align-items:center; gap:9px; text-decoration:none; color:var(--charcoal); flex-shrink:0; }
     .logo-icon { height:30px; width:auto; display:block; }
@@ -50,10 +51,6 @@
     .hero { padding:120px clamp(16px,4vw,48px) 80px; position:relative; overflow:hidden; min-height:90vh; display:flex; align-items:center; }
     .hero-bg { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
     .hero-bg::before { content:''; position:absolute; top:0; right:-20%; width:80%; height:100%; background:radial-gradient(circle at 60% 40%, rgba(232,135,58,0.08) 0%, transparent 50%), radial-gradient(circle at 80% 70%, rgba(244,162,97,0.06) 0%, transparent 40%); }
-    .hero-deco { position:absolute; border:1.5px dashed var(--sand); border-radius:50%; opacity:.5; }
-    .hero-deco-1 { width:400px; height:400px; top:-100px; right:-50px; }
-    .hero-deco-2 { width:250px; height:250px; bottom:-80px; right:200px; }
-    .hero-deco-3 { width:150px; height:150px; top:200px; right:100px; }
     .hero-inner { max-width:var(--max-width); margin:0 auto; width:100%; display:grid; grid-template-columns:1fr 1fr; gap:60px; align-items:center; position:relative; z-index:1; }
     .hero-content h1 { font-family:'Fraunces',serif; font-size:clamp(38px,5vw,64px); line-height:1.1; color:var(--charcoal); margin-bottom:24px; letter-spacing:-1px; }
     .hero-content h1 .highlight { color:var(--amber); position:relative; }
@@ -67,8 +64,7 @@
     .btn-secondary { display:inline-flex; align-items:center; gap:10px; padding:14px 32px; background:transparent; color:var(--charcoal); border:2px solid var(--sand); border-radius:50px; font-family:inherit; font-size:16px; font-weight:600; cursor:pointer; text-decoration:none; transition:all .25s ease; }
     .btn-secondary:hover { border-color:var(--charcoal); transform:translateY(-2px); }
     .hero-visual { position:relative; display:flex; justify-content:center; align-items:center; }
-    .hero-card { width:100%; max-width:480px; background:white; border-radius:24px; padding:32px; box-shadow:0 1px 3px rgba(0,0,0,0.04), 0 8px 32px rgba(0,0,0,0.06); border:1px solid rgba(0,0,0,0.06); position:relative; }
-    .hero-card::before { content:''; position:absolute; top:-8px; right:-8px; width:60px; height:60px; border:2px dashed var(--sand); border-radius:12px; z-index:-1; }
+    .hero-card { width:100%; max-width:480px; background:white; border-radius:18px; padding:28px; box-shadow:0 2px 12px rgba(0,0,0,0.06), 0 12px 40px rgba(0,0,0,0.08); border:1px solid var(--border); position:relative; }
     .hero-card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
     .hero-card-badge { display:inline-flex; align-items:center; gap:6px; padding:6px 14px; background:var(--cream-mid); border-radius:50px; font-size:13px; font-weight:600; color:var(--amber); }
     .hero-card-status { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; background:var(--yes-bg); border-radius:50px; font-size:12px; font-weight:600; color:var(--yes-green); }
@@ -81,20 +77,15 @@
     .stat-value { font-size:18px; font-weight:700; color:var(--charcoal); }
     .hero-card-sides { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
     .side-btn { padding:14px; border-radius:var(--radius-sm); border:2px solid; text-align:center; font-weight:600; font-size:15px; cursor:pointer; transition:all .2s ease; font-family:inherit; }
-    .side-yes { background:var(--yes-bg); border-color:var(--yes-green); color:var(--yes-green); }
-    .side-yes:hover { background:var(--yes-green); color:white; }
-    .side-no { background:var(--no-bg); border-color:var(--no-red); color:var(--no-red); }
-    .side-no:hover { background:var(--no-red); color:white; }
+    .side-yes { background:var(--yes-bg); border-color:rgba(34,134,58,.3); color:var(--yes-green); font-weight:700; }
+    .side-yes:hover { background:var(--yes-green); color:white; border-color:var(--yes-green); }
+    .side-no { background:var(--no-bg); border-color:rgba(192,57,43,.3); color:var(--no-red); font-weight:700; }
+    .side-no:hover { background:var(--no-red); color:white; border-color:var(--no-red); }
     .hero-card-footer { margin-top:16px; display:flex; align-items:center; gap:6px; font-size:12px; color:var(--light-gray); }
     .hero-card-footer svg { width:14px; height:14px; opacity:.5; }
-    .float-badge { position:absolute; padding:8px 16px; border-radius:50px; font-size:13px; font-weight:600; white-space:nowrap; box-shadow:0 4px 16px rgba(0,0,0,0.08); animation:float 4s ease-in-out infinite; }
-    .float-badge-1 { top:-10px; left:-30px; background:white; color:var(--amber); border:1px solid var(--cream-dark); animation-delay:0s; }
-    .float-badge-2 { bottom:40px; right:-40px; background:var(--charcoal); color:white; animation-delay:1.5s; }
-    .float-badge-3 { bottom:-15px; left:20px; background:white; color:var(--yes-green); border:1px solid var(--cream-dark); animation-delay:3s; }
-    @keyframes float { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-8px);} }
     .section-inner { max-width:var(--max-width); margin:0 auto; }
     .section-label { display:inline-flex; align-items:center; gap:8px; padding:8px 18px; background:var(--cream); border-radius:50px; font-size:13px; font-weight:600; color:var(--amber); text-transform:uppercase; letter-spacing:1px; margin-bottom:20px; }
-    .section-title { font-family:'Fraunces',serif; font-size:clamp(32px,4vw,48px); line-height:1.15; color:var(--charcoal); margin-bottom:16px; letter-spacing:-0.5px; }
+    .section-title { font-family:'Inter',-apple-system,sans-serif; font-size:clamp(28px,3.5vw,42px); font-weight:700; line-height:1.2; color:var(--charcoal); margin-bottom:16px; letter-spacing:-0.5px; }
     .section-desc { font-size:18px; color:var(--slate); line-height:1.7; max-width:600px; margin-bottom:60px; }
     .section-divider { height:1px; background:linear-gradient(90deg,transparent,var(--sand),transparent); }
     .how-it-works { padding:100px clamp(16px,4vw,48px); background:white; position:relative; }
@@ -114,7 +105,9 @@
     .comparison-table thead th:first-child { border-top-left-radius:var(--radius); }
     .comparison-table thead th:last-child { border-top-right-radius:var(--radius); }
     .comparison-table thead th.highlight-col { background:var(--amber); color:white; }
-    .comparison-table tbody td { padding:18px 24px; font-size:15px; color:var(--ink); border-bottom:1px solid var(--cream-dark); vertical-align:top; }
+    .comparison-table tbody td { padding:16px 24px; font-size:14px; color:var(--ink); border-bottom:1px solid var(--cream-dark); vertical-align:top; }
+    .comparison-table tbody tr:nth-child(odd) td { background:rgba(255,248,240,.45); }
+    .comparison-table tbody tr:nth-child(odd) td.highlight-col { background:rgba(232,135,58,.07); }
     .comparison-table tbody tr:last-child td { border-bottom:none; }
     .comparison-table tbody td:first-child { font-weight:600; color:var(--slate); width:200px; }
     .comparison-table tbody td.highlight-col { background:rgba(232,135,58,0.04); }
@@ -204,9 +197,9 @@
     .markets-empty-icon { font-size:48px; margin-bottom:16px; }
     .markets-empty h3 { font-family:'Fraunces',serif; font-size:24px; color:var(--charcoal); margin-bottom:8px; }
     .markets-empty p { color:var(--slate); font-size:16px; }
-    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); z-index:2000; display:none; align-items:center; justify-content:center; padding:24px; }
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.65); backdrop-filter:blur(6px); z-index:2000; display:none; align-items:center; justify-content:center; padding:20px; }
     .modal-overlay.active { display:flex; }
-    .modal { background:white; border-radius:24px; padding:36px; max-width:440px; width:100%; box-shadow:0 24px 64px rgba(0,0,0,0.2); position:relative; }
+    .modal { background:white; border-radius:20px; padding:28px; max-width:440px; width:100%; box-shadow:0 20px 60px rgba(0,0,0,0.22); position:relative; }
     .modal-close { position:absolute; top:16px; right:16px; width:36px; height:36px; border:none; background:var(--cream); border-radius:50%; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--slate); transition:all .2s ease; }
     .modal-close:hover { background:var(--cream-dark); color:var(--charcoal); }
     .modal h3 { font-family:'Fraunces',serif; font-size:24px; color:var(--charcoal); margin-bottom:8px; padding-right:40px; }
@@ -234,8 +227,8 @@
     .faq-item:hover { border-color:var(--sand); }
     .faq-q { padding:20px 24px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; gap:12px; }
     .faq-q span { font-weight:600; font-size:16px; color:var(--charcoal); line-height:1.4; }
-    .faq-toggle { width:32px; height:32px; background:white; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:18px; color:var(--amber); flex-shrink:0; transition:transform .3s ease; }
-    .faq-item.open .faq-toggle { transform:rotate(45deg); }
+    .faq-toggle { width:24px; height:24px; display:flex; align-items:center; justify-content:center; font-size:16px; color:var(--slate); flex-shrink:0; transition:transform .3s ease; }
+    .faq-item.open .faq-toggle { transform:rotate(180deg); color:var(--amber); }
     .faq-a { max-height:0; overflow:hidden; transition:max-height .3s ease, padding .3s ease; }
     .faq-item.open .faq-a { max-height:300px; }
     .faq-a-inner { padding:0 24px 20px; font-size:15px; color:var(--slate); line-height:1.7; }
@@ -342,11 +335,7 @@
   </div>
 
   <section class="hero">
-    <div class="hero-bg">
-      <div class="hero-deco hero-deco-1"></div>
-      <div class="hero-deco hero-deco-2"></div>
-      <div class="hero-deco hero-deco-3"></div>
-    </div>
+    <div class="hero-bg"></div>
     <div class="hero-inner">
       <div class="hero-content">
         <h1>Place Your Prediction<br/><span class="highlight">Quietly.</span></h1>
@@ -363,7 +352,7 @@
       <div class="hero-visual">
         <div class="hero-card">
           <div class="hero-card-header">
-            <span class="hero-card-badge"><span class="lock-icon">🔒</span> FHE-Encrypted</span>
+            <span class="hero-card-badge"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-1px;margin-right:4px;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>FHE-Encrypted</span>
             <span class="hero-card-status" id="heroStatus"><span class="pulse"></span><span id="heroStatusText">Loading…</span></span>
           </div>
           <div class="hero-card-question" id="heroQuestion">Loading market data…</div>
@@ -373,17 +362,14 @@
             <div class="stat-item"><div class="stat-label">Ends</div><div class="stat-value" id="heroDeadline">—</div></div>
           </div>
           <div class="hero-card-sides" id="heroCardSides">
-            <button class="side-btn side-yes" onclick="openBetModal(heroMarketId, 1)">🛡️ YES</button>
-            <button class="side-btn side-no" onclick="openBetModal(heroMarketId, 0)">🛡️ NO</button>
+            <button class="side-btn side-yes" onclick="openBetModal(heroMarketId, 1)">YES</button>
+            <button class="side-btn side-no" onclick="openBetModal(heroMarketId, 0)">NO</button>
           </div>
           <div class="hero-card-footer">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
             <span>Your bet amount is encrypted — directions stay public</span>
           </div>
         </div>
-        <div class="float-badge float-badge-1">🔐 Hidden Bet Sizes</div>
-        <div class="float-badge float-badge-2">⚡ Sepolia Live</div>
-        <div class="float-badge float-badge-3">✓ FHE Verified</div>
       </div>
     </div>
   </section>
@@ -581,14 +567,14 @@
       <h2 class="section-title">Frequently Asked Questions</h2>
       <p class="section-desc">Everything you need to know about ShieldOdds.</p>
       <div class="faq-grid">
-        <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)"><span>What is FHE and why does it matter?</span><div class="faq-toggle">+</div></div><div class="faq-a"><div class="faq-a-inner">Fully Homomorphic Encryption (FHE) allows computation on encrypted data without ever decrypting it. In ShieldOdds, this means the smart contract processes your bet without knowing how much you wagered. Your bet amount stays encrypted on-chain until the market is settled and KMS-verified decryption reveals all amounts simultaneously for payout calculation.</div></div></div>
-        <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)"><span>What exactly is encrypted vs public?</span><div class="faq-toggle">+</div></div><div class="faq-a"><div class="faq-a-inner">Only your bet <strong>amount</strong> is encrypted. Your bet <strong>direction</strong> (YES or NO), wallet address, and the market details are all public on-chain. This prevents whale tracking and size-based front-running while keeping bet directions transparent. At settlement, bet amounts are decrypted for payout calculation.</div></div></div>
-        <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)"><span>How does this prevent front-running?</span><div class="faq-toggle">+</div></div><div class="faq-a"><div class="faq-a-inner">In traditional prediction markets, everyone can see how much you're betting. Bots and whales exploit this by front-running large bets — placing their own bets first to manipulate the odds. Since ShieldOdds encrypts your bet amount, no one can identify large positions to front-run. Bet sizes are only revealed during settlement, after all bets are locked in.</div></div></div>
-        <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)"><span>How are payouts calculated?</span><div class="faq-toggle">+</div></div><div class="faq-a"><div class="faq-a-inner">Payouts are pro-rata: your share of the total pool is proportional to your bet relative to all winning bets. A 1% protocol fee is deducted from the pool before distribution. If no one bet on the winning side, all bettors receive a full refund (no fee applied).</div></div></div>
-        <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)"><span>What network is ShieldOdds on?</span><div class="faq-toggle">+</div></div><div class="faq-a"><div class="faq-a-inner">ShieldOdds is deployed on Ethereum's Sepolia testnet with Zama's FHE coprocessor. This is a testnet deployment — you use free Sepolia ETH, not real funds. You can get testnet ETH from any Sepolia faucet.</div></div></div>
-        <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)"><span>Who resolves the market outcome?</span><div class="faq-toggle">+</div></div><div class="faq-a"><div class="faq-a-inner">For crypto price markets, resolution is <strong>automatic via Chainlink oracle</strong>. After the deadline, anyone can trigger resolution — the contract reads the live price directly from Chainlink's on-chain price feed and determines the outcome (e.g., did BTC reach $100k?). No human input needed. For custom markets without a price feed, the creator resolves manually. After resolution, the settlement process decrypts all bet amounts using KMS-verified proofs and computes pro-rata payouts.</div></div></div>
-        <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)"><span>What wallet do I need?</span><div class="faq-toggle">+</div></div><div class="faq-a"><div class="faq-a-inner">Any Ethereum-compatible wallet that supports Sepolia testnet works — MetaMask, Rabby, or similar. The app will automatically prompt you to switch to Sepolia (chain ID 11155111) when you connect.</div></div></div>
-        <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)"><span>What is the minimum bet?</span><div class="faq-toggle">+</div></div><div class="faq-a"><div class="faq-a-inner">The minimum bet is 0.001 ETH (enforced in the frontend). First deposit ETH to create your encrypted on-chain balance, then place bets from that balance. Since this is a testnet, the ETH has no real monetary value — you can get it free from Sepolia faucets.</div></div></div>
+        <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)"><span>What is FHE and why does it matter?</span><div class="faq-toggle">▾</div></div><div class="faq-a"><div class="faq-a-inner">Fully Homomorphic Encryption (FHE) allows computation on encrypted data without ever decrypting it. In ShieldOdds, this means the smart contract processes your bet without knowing how much you wagered. Your bet amount stays encrypted on-chain until the market is settled and KMS-verified decryption reveals all amounts simultaneously for payout calculation.</div></div></div>
+        <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)"><span>What exactly is encrypted vs public?</span><div class="faq-toggle">▾</div></div><div class="faq-a"><div class="faq-a-inner">Only your bet <strong>amount</strong> is encrypted. Your bet <strong>direction</strong> (YES or NO), wallet address, and the market details are all public on-chain. This prevents whale tracking and size-based front-running while keeping bet directions transparent. At settlement, bet amounts are decrypted for payout calculation.</div></div></div>
+        <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)"><span>How does this prevent front-running?</span><div class="faq-toggle">▾</div></div><div class="faq-a"><div class="faq-a-inner">In traditional prediction markets, everyone can see how much you're betting. Bots and whales exploit this by front-running large bets — placing their own bets first to manipulate the odds. Since ShieldOdds encrypts your bet amount, no one can identify large positions to front-run. Bet sizes are only revealed during settlement, after all bets are locked in.</div></div></div>
+        <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)"><span>How are payouts calculated?</span><div class="faq-toggle">▾</div></div><div class="faq-a"><div class="faq-a-inner">Payouts are pro-rata: your share of the total pool is proportional to your bet relative to all winning bets. A 1% protocol fee is deducted from the pool before distribution. If no one bet on the winning side, all bettors receive a full refund (no fee applied).</div></div></div>
+        <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)"><span>What network is ShieldOdds on?</span><div class="faq-toggle">▾</div></div><div class="faq-a"><div class="faq-a-inner">ShieldOdds is deployed on Ethereum's Sepolia testnet with Zama's FHE coprocessor. This is a testnet deployment — you use free Sepolia ETH, not real funds. You can get testnet ETH from any Sepolia faucet.</div></div></div>
+        <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)"><span>Who resolves the market outcome?</span><div class="faq-toggle">▾</div></div><div class="faq-a"><div class="faq-a-inner">For crypto price markets, resolution is <strong>automatic via Chainlink oracle</strong>. After the deadline, anyone can trigger resolution — the contract reads the live price directly from Chainlink's on-chain price feed and determines the outcome (e.g., did BTC reach $100k?). No human input needed. For custom markets without a price feed, the creator resolves manually. After resolution, the settlement process decrypts all bet amounts using KMS-verified proofs and computes pro-rata payouts.</div></div></div>
+        <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)"><span>What wallet do I need?</span><div class="faq-toggle">▾</div></div><div class="faq-a"><div class="faq-a-inner">Any Ethereum-compatible wallet that supports Sepolia testnet works — MetaMask, Rabby, or similar. The app will automatically prompt you to switch to Sepolia (chain ID 11155111) when you connect.</div></div></div>
+        <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)"><span>What is the minimum bet?</span><div class="faq-toggle">▾</div></div><div class="faq-a"><div class="faq-a-inner">The minimum bet is 0.001 ETH (enforced in the frontend). First deposit ETH to create your encrypted on-chain balance, then place bets from that balance. Since this is a testnet, the ETH has no real monetary value — you can get it free from Sepolia faucets.</div></div></div>
       </div>
     </div>
   </section>
@@ -621,8 +607,8 @@
       <h3>Place Your Bet</h3>
       <div class="modal-question" id="modalQuestion">—</div>
       <div class="modal-sides">
-        <button class="modal-side" id="modalYes" onclick="selectSide(1)">🛡️ YES</button>
-        <button class="modal-side" id="modalNo" onclick="selectSide(0)">🛡️ NO</button>
+        <button class="modal-side" id="modalYes" onclick="selectSide(1)">YES</button>
+        <button class="modal-side" id="modalNo" onclick="selectSide(0)">NO</button>
       </div>
       <div class="modal-input-group">
         <label>Bet Amount <span style="font-weight:400;color:var(--slate);font-size:13px;">(from encrypted balance)</span></label>
@@ -672,68 +658,64 @@
   <div class="modal-overlay" id="createMarketModal">
     <div class="modal" style="max-width:500px;">
       <button class="modal-close" onclick="closeCreateMarketModal()">✕</button>
-      <h3>Create Market</h3>
-      <p class="modal-question">Launch a new prediction market for the community to bet on.</p>
+      <h3>Create Oracle Market</h3>
+      <p class="modal-question">Resolves automatically via Chainlink price feed after the deadline.</p>
 
       <!-- Market Question -->
       <div class="modal-input-group">
         <label>Market Question</label>
         <div class="modal-input-wrap">
-          <input type="text" id="cmQuestion" placeholder="Will ETH reach $4,000 by July 31, 2026?" maxlength="200" style="flex:1;padding:13px 16px;border:none;background:transparent;font-family:inherit;font-size:15px;font-weight:500;color:var(--charcoal);outline:none;" />
+          <input type="text" id="cmQuestion" placeholder="Will ETH reach $4,000 by July 31, 2026?" maxlength="200"
+            style="flex:1;padding:13px 16px;border:none;background:transparent;font-family:inherit;font-size:15px;font-weight:500;color:var(--charcoal);outline:none;" />
         </div>
         <div class="cm-field-error" id="cmQuestionError"></div>
         <div style="font-size:11px;color:var(--light-gray);margin-top:4px;"><span id="cmQuestionCount">0</span>/200 characters</div>
       </div>
 
-      <!-- Resolution Type -->
-      <div class="modal-input-group">
-        <label>Resolution Type</label>
-        <div class="modal-sides">
-          <button class="modal-side" id="cmTypeOracle" onclick="selectMarketType('oracle')">🔗 Chainlink Oracle</button>
-          <button class="modal-side" id="cmTypeManual" onclick="selectMarketType('manual')">⊙ Manual Resolution</button>
-        </div>
-      </div>
-
-      <!-- Deadline -->
+      <!-- Deadline — uses plain input to avoid overflow:hidden clipping the native picker -->
       <div class="modal-input-group">
         <label>Deadline</label>
-        <div class="modal-input-wrap">
-          <input type="datetime-local" id="cmDeadline" style="flex:1;padding:13px 16px;border:none;background:transparent;font-family:inherit;font-size:14px;font-weight:500;color:var(--charcoal);outline:none;" />
-        </div>
+        <input type="datetime-local" id="cmDeadline"
+          style="width:100%;padding:12px 14px;border:2px solid var(--cream-dark);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;font-weight:500;color:var(--charcoal);background:var(--cream);outline:none;transition:border-color .2s;" />
         <div class="cm-field-error" id="cmDeadlineError"></div>
       </div>
 
-      <!-- Oracle-specific fields -->
-      <div class="cm-oracle-section" id="cmOracleSection">
-        <div class="modal-input-group" style="margin-bottom:16px;">
-          <label>Chainlink Price Feed</label>
-          <div class="modal-input-wrap">
-            <select id="cmFeed" class="modal-select">
-              <option value="">Select a price feed…</option>
-              <option value="BTC/USD">₿ BTC / USD</option>
-              <option value="ETH/USD">Ξ ETH / USD</option>
-              <option value="LINK/USD">⬡ LINK / USD</option>
-            </select>
-          </div>
-          <div class="cm-field-error" id="cmFeedError"></div>
+      <!-- Chainlink price feed -->
+      <div class="modal-input-group">
+        <label>Chainlink Price Feed</label>
+        <div class="modal-input-wrap">
+          <select id="cmFeed" class="modal-select" onchange="onFeedChange()">
+            <option value="">Select a price feed…</option>
+            <option value="BTC/USD">BTC / USD</option>
+            <option value="ETH/USD">ETH / USD</option>
+            <option value="LINK/USD">LINK / USD</option>
+          </select>
         </div>
-        <div class="modal-input-group" style="margin-bottom:0;">
-          <label>Target Price (USD) <span style="font-weight:400;color:var(--slate);font-size:12px;">— market resolves YES if price ≥ target</span></label>
-          <div class="modal-input-wrap">
-            <input type="number" id="cmTargetPrice" placeholder="4000" min="0.01" step="0.01" style="flex:1;padding:13px 16px;border:none;background:transparent;font-family:inherit;font-size:18px;font-weight:600;color:var(--charcoal);outline:none;" />
-            <span class="unit">USD</span>
-          </div>
-          <div class="cm-field-error" id="cmTargetPriceError"></div>
-        </div>
+        <div class="cm-field-error" id="cmFeedError"></div>
       </div>
 
-      <!-- Manual resolution note -->
-      <div class="modal-note cm-manual-note" id="cmManualNote">
-        <span class="note-icon">ℹ️</span>
-        <span>You will resolve this market manually after the deadline by choosing a YES or NO outcome. Only the market creator can call <code style="background:var(--cream-dark);padding:1px 4px;border-radius:3px;font-size:12px;">resolveManual()</code>.</span>
+      <!-- Target price -->
+      <div class="modal-input-group">
+        <label>Target Price (USD)
+          <span style="font-weight:400;color:var(--slate);font-size:12px;">— market resolves YES if price ≥ target</span>
+        </label>
+        <div class="modal-input-wrap">
+          <input type="number" id="cmTargetPrice" placeholder="4000" min="0.01" step="any"
+            style="flex:1;padding:13px 16px;border:none;background:transparent;font-family:inherit;font-size:18px;font-weight:600;color:var(--charcoal);outline:none;" />
+          <span class="unit">USD</span>
+        </div>
+        <div class="cm-field-error" id="cmTargetPriceError"></div>
+        <div id="cmPriceHint" style="font-size:11px;color:var(--slate);margin-top:4px;display:none;"></div>
       </div>
 
-      <button class="btn-place-bet" id="btnCreateMarket" onclick="createMarket()" disabled>Select a resolution type to continue</button>
+      <div style="display:flex;gap:10px;margin-top:4px;">
+        <button class="btn-place-bet" id="btnCreateMarket" onclick="createMarket()" style="flex:1;">
+          Create Oracle Market
+        </button>
+        <button onclick="closeCreateMarketModal()" style="padding:14px 18px;background:white;color:var(--slate);border:2px solid var(--cream-dark);border-radius:50px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .2s;">
+          Cancel
+        </button>
+      </div>
     </div>
   </div>
 
@@ -1525,8 +1507,8 @@
 
         if (isOpen) {
           sidesEl.innerHTML = `
-            <button class="side-btn side-yes" onclick="openBetModal(heroMarketId, 1)">🛡️ YES</button>
-            <button class="side-btn side-no" onclick="openBetModal(heroMarketId, 0)">🛡️ NO</button>
+            <button class="side-btn side-yes" onclick="openBetModal(heroMarketId, 1)">YES</button>
+            <button class="side-btn side-no" onclick="openBetModal(heroMarketId, 0)">NO</button>
           `;
         } else if (isPastDeadline && isOracleMarket) {
           sidesEl.innerHTML = `
@@ -1603,7 +1585,7 @@
 
           let actionHtml = '';
           if (isOpen) {
-            actionHtml = `<button class="btn-bet" onclick="openBetModal(${i})">🛡️ View & Bet</button>`;
+            actionHtml = `<button class="btn-bet" onclick="openBetModal(${i})">View & Bet</button>`;
           } else if (isPastDeadline && isOracle) {
             actionHtml = `<button class="btn-bet" style="background:linear-gradient(135deg,#E8873A,#D4722A);color:#fff;" onclick="resolveOracleMarket(${i}, event)">🔗 Resolve</button>`;
           } else if (hasPayout) {
@@ -1713,7 +1695,7 @@
         btn.textContent = 'Connect wallet first';
       } else {
         btn.disabled = false;
-        btn.textContent = modalSide === 1 ? '🛡️ Bet YES (amount encrypted)' : '🛡️ Bet NO (amount encrypted)';
+        btn.textContent = modalSide === 1 ? 'Bet YES (amount encrypted)' : 'Bet NO (amount encrypted)';
       }
     }
 
@@ -2164,33 +2146,40 @@
 
     // ── Create Market ─────────────────────────────────────────────────────────
 
-    let cmMarketType = null; // 'oracle' | 'manual'
+    // ── Create Market (Oracle-only) ───────────────────────────────────────────
+
+    // Reasonable USD price ranges per feed — used for sanity warnings
+    const FEED_RANGES = {
+      'BTC/USD':  { min: 100, max: 10_000_000, placeholder: '100000' },
+      'ETH/USD':  { min: 10,  max: 1_000_000,  placeholder: '4000'   },
+      'LINK/USD': { min: 0.1, max: 100_000,    placeholder: '20'     },
+    };
+
+    function _toLocalDt(date) {
+      // Format a Date as YYYY-MM-DDTHH:MM in LOCAL timezone for datetime-local inputs
+      // (toISOString() gives UTC, which breaks the min constraint for non-UTC users)
+      const pad = n => String(n).padStart(2, '0');
+      return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
 
     function openCreateMarketModal() {
       if (!userAddress || !contract) {
         showToast('Please connect your wallet first', true);
         return;
       }
-      // Reset all fields and errors
       document.getElementById('cmQuestion').value = '';
       document.getElementById('cmQuestionCount').textContent = '0';
       document.getElementById('cmDeadline').value = '';
       document.getElementById('cmFeed').value = '';
       document.getElementById('cmTargetPrice').value = '';
-      cmMarketType = null;
-      document.getElementById('cmTypeOracle').className = 'modal-side';
-      document.getElementById('cmTypeManual').className = 'modal-side';
-      document.getElementById('cmOracleSection').classList.remove('visible');
-      document.getElementById('cmManualNote').classList.remove('visible');
+      document.getElementById('cmPriceHint').style.display = 'none';
       ['cmQuestionError','cmDeadlineError','cmFeedError','cmTargetPriceError'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
       });
-      document.getElementById('btnCreateMarket').disabled = true;
-      document.getElementById('btnCreateMarket').textContent = 'Select a resolution type to continue';
-      // Minimum deadline = 1 hour from now
-      const minDt = new Date(Date.now() + 3600 * 1000);
-      document.getElementById('cmDeadline').min = minDt.toISOString().slice(0, 16);
+      // Set minimum deadline = 1 hour from now, in local time
+      document.getElementById('cmDeadline').min = _toLocalDt(new Date(Date.now() + 3600_000));
+      document.getElementById('btnCreateMarket').disabled = false;
       document.getElementById('createMarketModal').classList.add('active');
     }
 
@@ -2198,15 +2187,22 @@
       document.getElementById('createMarketModal').classList.remove('active');
     }
 
-    function selectMarketType(type) {
-      cmMarketType = type;
-      document.getElementById('cmTypeOracle').className = type === 'oracle' ? 'modal-side selected-yes' : 'modal-side';
-      document.getElementById('cmTypeManual').className = type === 'manual' ? 'modal-side selected-yes' : 'modal-side';
-      document.getElementById('cmOracleSection').classList.toggle('visible', type === 'oracle');
-      document.getElementById('cmManualNote').classList.toggle('visible', type === 'manual');
-      const btn = document.getElementById('btnCreateMarket');
-      btn.disabled = false;
-      btn.textContent = type === 'oracle' ? '🔗 Create Oracle Market' : '⊙ Create Manual Market';
+    function onFeedChange() {
+      const feedKey = document.getElementById('cmFeed').value;
+      const tp = document.getElementById('cmTargetPrice');
+      const hint = document.getElementById('cmPriceHint');
+      const range = FEED_RANGES[feedKey];
+      // Clear previous price and update placeholder for the new feed
+      tp.value = '';
+      tp.placeholder = range ? range.placeholder : '0.00';
+      document.getElementById('cmFeedError').style.display = 'none';
+      document.getElementById('cmTargetPriceError').style.display = 'none';
+      if (feedKey && range) {
+        hint.textContent = `Typical range: $${range.min.toLocaleString()} – $${range.max.toLocaleString()}`;
+        hint.style.display = '';
+      } else {
+        hint.style.display = 'none';
+      }
     }
 
     async function createMarket() {
@@ -2216,73 +2212,54 @@
       const question = document.getElementById('cmQuestion').value.trim();
       const qErr = document.getElementById('cmQuestionError');
       if (!question) {
-        qErr.textContent = 'Market question is required.';
-        qErr.style.display = '';
-        valid = false;
+        qErr.textContent = 'Market question is required.'; qErr.style.display = ''; valid = false;
       } else if (question.length > 200) {
-        qErr.textContent = 'Question must be 200 characters or fewer.';
-        qErr.style.display = '';
-        valid = false;
-      } else {
-        qErr.style.display = 'none';
-      }
+        qErr.textContent = 'Question must be 200 characters or fewer.'; qErr.style.display = ''; valid = false;
+      } else { qErr.style.display = 'none'; }
 
-      // Validate deadline
+      // Validate deadline (datetime-local gives local time; new Date() parses it correctly)
       const deadlineStr = document.getElementById('cmDeadline').value;
       const dErr = document.getElementById('cmDeadlineError');
       let deadlineTs = 0;
       if (!deadlineStr) {
-        dErr.textContent = 'Deadline is required.';
-        dErr.style.display = '';
-        valid = false;
+        dErr.textContent = 'Deadline is required.'; dErr.style.display = ''; valid = false;
       } else {
         deadlineTs = Math.floor(new Date(deadlineStr).getTime() / 1000);
         if (deadlineTs < Math.floor(Date.now() / 1000) + 3600) {
-          dErr.textContent = 'Deadline must be at least 1 hour in the future.';
-          dErr.style.display = '';
-          valid = false;
-        } else {
-          dErr.style.display = 'none';
-        }
+          dErr.textContent = 'Deadline must be at least 1 hour in the future.'; dErr.style.display = ''; valid = false;
+        } else { dErr.style.display = 'none'; }
       }
 
-      // Validate market type
-      if (!cmMarketType) {
-        showToast('Please select a resolution type', true);
-        return;
-      }
+      // Validate feed
+      const feedKey = document.getElementById('cmFeed').value;
+      const fErr = document.getElementById('cmFeedError');
+      if (!feedKey || !CHAINLINK_FEEDS[feedKey]) {
+        fErr.textContent = 'Please select a Chainlink price feed.'; fErr.style.display = ''; valid = false;
+      } else { fErr.style.display = 'none'; }
 
-      // Oracle-specific validation
-      let feedAddress = ZERO_ADDRESS;
+      // Validate target price
+      const tpStr = document.getElementById('cmTargetPrice').value;
+      const tpUsd = parseFloat(tpStr);
+      const tpErr = document.getElementById('cmTargetPriceError');
       let targetPriceInt = 0;
-      if (cmMarketType === 'oracle') {
-        const feedKey = document.getElementById('cmFeed').value;
-        const fErr = document.getElementById('cmFeedError');
-        if (!feedKey || !CHAINLINK_FEEDS[feedKey]) {
-          fErr.textContent = 'Please select a Chainlink price feed.';
-          fErr.style.display = '';
+      if (!tpStr || isNaN(tpUsd) || tpUsd <= 0) {
+        tpErr.textContent = 'Target price must be greater than 0.'; tpErr.style.display = ''; valid = false;
+      } else if (feedKey && FEED_RANGES[feedKey]) {
+        const range = FEED_RANGES[feedKey];
+        if (tpUsd < range.min || tpUsd > range.max) {
+          tpErr.textContent = `Target price seems out of range for ${feedKey} ($${range.min.toLocaleString()}–$${range.max.toLocaleString()}).`;
+          tpErr.style.display = '';
           valid = false;
         } else {
-          fErr.style.display = 'none';
-          feedAddress = CHAINLINK_FEEDS[feedKey].address;
+          tpErr.style.display = 'none';
           const feedDecimals = CHAINLINK_FEEDS[feedKey].decimals;
-          const tpStr = document.getElementById('cmTargetPrice').value;
-          const tpUsd = parseFloat(tpStr);
-          const tpErr = document.getElementById('cmTargetPriceError');
-          if (!tpStr || isNaN(tpUsd) || tpUsd <= 0) {
-            tpErr.textContent = 'Target price must be greater than 0.';
-            tpErr.style.display = '';
-            valid = false;
-          } else {
-            tpErr.style.display = 'none';
-            // Convert USD → feed units (e.g. $4000 × 10^8 = 400000000000 for 8-decimal feeds)
-            targetPriceInt = Math.round(tpUsd * Math.pow(10, feedDecimals));
-          }
+          targetPriceInt = Math.round(tpUsd * Math.pow(10, feedDecimals));
         }
       }
 
       if (!valid) return;
 
+      const feedAddress = CHAINLINK_FEEDS[feedKey].address;
       const btn = document.getElementById('btnCreateMarket');
       const origText = btn.textContent;
       btn.disabled = true;
@@ -2292,21 +2269,15 @@
         const tx = await contract.createMarket(question, deadlineTs, feedAddress, targetPriceInt);
         showToast('Transaction submitted — confirming…');
         const receipt = await tx.wait();
-
-        // Extract marketId from MarketCreated event
         let marketId = null;
         for (const log of receipt.logs) {
           try {
             const parsed = contract.interface.parseLog({ topics: [...log.topics], data: log.data });
-            if (parsed && parsed.name === 'MarketCreated') {
-              marketId = parsed.args.marketId.toNumber();
-              break;
-            }
+            if (parsed && parsed.name === 'MarketCreated') { marketId = parsed.args.marketId.toNumber(); break; }
           } catch (_) {}
         }
-
         const idStr = marketId !== null ? ` (#${marketId})` : '';
-        showToast(`✅ Market created${idStr}! 🎉`);
+        showToast(`Market created${idStr}!`);
         closeCreateMarketModal();
         loadHeroMarket();
         loadMarketsList();
