@@ -265,6 +265,17 @@
     .btn-connect .chevron { font-size:9px; opacity:.65; margin-left:2px; transition:transform .2s; }
     .wallet-dropdown.open + * .chevron,
     .btn-connect:has(+ .wallet-dropdown.open) .chevron { transform:rotate(180deg); }
+    /* ── Create Market ── */
+    .markets-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:20px; }
+    .btn-create-market { display:inline-flex; align-items:center; gap:7px; padding:9px 20px; background:var(--amber); color:white; border:none; border-radius:50px; font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; transition:all .25s ease; }
+    .btn-create-market:hover { background:var(--amber-dark); transform:translateY(-1px); box-shadow:0 4px 16px rgba(232,135,58,.3); }
+    .modal-select { flex:1; padding:13px 16px; border:none; background:transparent; font-family:inherit; font-size:15px; font-weight:500; color:var(--charcoal); outline:none; cursor:pointer; appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23A8A8A8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 14px center; padding-right:36px; }
+    .modal-input-wrap input[type="datetime-local"] { font-size:14px; font-weight:500; }
+    .cm-field-error { font-size:12px; color:var(--no-red); margin-top:5px; display:none; }
+    .cm-oracle-section { background:rgba(232,135,58,.04); border:1px solid rgba(232,135,58,.15); border-radius:var(--radius-sm); padding:16px; display:none; flex-direction:column; gap:0; }
+    .cm-oracle-section.visible { display:flex; }
+    .cm-manual-note { display:none; }
+    .cm-manual-note.visible { display:flex; }
     @media (max-width:1024px) { .tech-grid{grid-template-columns:1fr 1fr;} .footer-top{grid-template-columns:1fr 1fr;gap:32px;} }
     @media (max-width:900px) {
       .hero-inner{grid-template-columns:1fr;gap:40px;} .hero-visual{order:-1;} .hero-card{max-width:400px;margin:0 auto;}
@@ -531,7 +542,10 @@
 
   <section class="markets" id="markets">
     <div class="section-inner">
-      <div class="section-label"><span>📊</span> Live Markets</div>
+      <div class="markets-header">
+        <div class="section-label" style="margin-bottom:0;"><span>📊</span> Live Markets</div>
+        <button class="btn-create-market" onclick="openCreateMarketModal()">➕ Create Market</button>
+      </div>
       <h2 class="section-title">Active Prediction Markets</h2>
       <p class="section-desc">
         Deposit ETH to fund your encrypted balance, then place bets on any open market.
@@ -639,6 +653,75 @@
         <span>Withdrawals are a two-step process: your request is submitted on-chain, then the KMS decrypts and verifies your balance before releasing ETH. This can take a moment.</span>
       </div>
       <button class="btn-place-bet" id="btnConfirmWithdraw" onclick="submitWithdraw()">↩ Request Withdrawal</button>
+    </div>
+  </div>
+
+  <!-- ═══════ CREATE MARKET MODAL ═══════ -->
+  <div class="modal-overlay" id="createMarketModal">
+    <div class="modal" style="max-width:500px;">
+      <button class="modal-close" onclick="closeCreateMarketModal()">✕</button>
+      <h3>Create Market</h3>
+      <p class="modal-question">Launch a new prediction market for the community to bet on.</p>
+
+      <!-- Market Question -->
+      <div class="modal-input-group">
+        <label>Market Question</label>
+        <div class="modal-input-wrap">
+          <input type="text" id="cmQuestion" placeholder="Will ETH reach $4,000 by July 31, 2026?" maxlength="200" style="flex:1;padding:13px 16px;border:none;background:transparent;font-family:inherit;font-size:15px;font-weight:500;color:var(--charcoal);outline:none;" />
+        </div>
+        <div class="cm-field-error" id="cmQuestionError"></div>
+        <div style="font-size:11px;color:var(--light-gray);margin-top:4px;"><span id="cmQuestionCount">0</span>/200 characters</div>
+      </div>
+
+      <!-- Resolution Type -->
+      <div class="modal-input-group">
+        <label>Resolution Type</label>
+        <div class="modal-sides">
+          <button class="modal-side" id="cmTypeOracle" onclick="selectMarketType('oracle')">🔗 Chainlink Oracle</button>
+          <button class="modal-side" id="cmTypeManual" onclick="selectMarketType('manual')">⊙ Manual Resolution</button>
+        </div>
+      </div>
+
+      <!-- Deadline -->
+      <div class="modal-input-group">
+        <label>Deadline</label>
+        <div class="modal-input-wrap">
+          <input type="datetime-local" id="cmDeadline" style="flex:1;padding:13px 16px;border:none;background:transparent;font-family:inherit;font-size:14px;font-weight:500;color:var(--charcoal);outline:none;" />
+        </div>
+        <div class="cm-field-error" id="cmDeadlineError"></div>
+      </div>
+
+      <!-- Oracle-specific fields -->
+      <div class="cm-oracle-section" id="cmOracleSection">
+        <div class="modal-input-group" style="margin-bottom:16px;">
+          <label>Chainlink Price Feed</label>
+          <div class="modal-input-wrap">
+            <select id="cmFeed" class="modal-select">
+              <option value="">Select a price feed…</option>
+              <option value="BTC/USD">₿ BTC / USD</option>
+              <option value="ETH/USD">Ξ ETH / USD</option>
+              <option value="LINK/USD">⬡ LINK / USD</option>
+            </select>
+          </div>
+          <div class="cm-field-error" id="cmFeedError"></div>
+        </div>
+        <div class="modal-input-group" style="margin-bottom:0;">
+          <label>Target Price (USD) <span style="font-weight:400;color:var(--slate);font-size:12px;">— market resolves YES if price ≥ target</span></label>
+          <div class="modal-input-wrap">
+            <input type="number" id="cmTargetPrice" placeholder="4000" min="0.01" step="0.01" style="flex:1;padding:13px 16px;border:none;background:transparent;font-family:inherit;font-size:18px;font-weight:600;color:var(--charcoal);outline:none;" />
+            <span class="unit">USD</span>
+          </div>
+          <div class="cm-field-error" id="cmTargetPriceError"></div>
+        </div>
+      </div>
+
+      <!-- Manual resolution note -->
+      <div class="modal-note cm-manual-note" id="cmManualNote">
+        <span class="note-icon">ℹ️</span>
+        <span>You will resolve this market manually after the deadline by choosing a YES or NO outcome. Only the market creator can call <code style="background:var(--cream-dark);padding:1px 4px;border-radius:3px;font-size:12px;">resolveManual()</code>.</span>
+      </div>
+
+      <button class="btn-place-bet" id="btnCreateMarket" onclick="createMarket()" disabled>Select a resolution type to continue</button>
     </div>
   </div>
 
@@ -774,6 +857,7 @@
       'event WithdrawalRequested(uint256 indexed requestId, address indexed user, uint256 amount)',
       'event WithdrawalCompleted(uint256 indexed requestId, address indexed user, uint256 amount)',
       'event WithdrawalCancelled(uint256 indexed requestId)',
+      'event MarketCreated(uint256 indexed marketId, string question, uint256 deadline, address indexed creator, address priceFeed, int256 targetPrice)',
     ];
 
     const CHAINLINK_FEEDS = {
@@ -2035,6 +2119,163 @@
       el.closest('.faq-item').classList.toggle('open');
     }
 
+    // ── Create Market ─────────────────────────────────────────────────────────
+
+    let cmMarketType = null; // 'oracle' | 'manual'
+
+    function openCreateMarketModal() {
+      if (!userAddress || !contract) {
+        showToast('Please connect your wallet first', true);
+        return;
+      }
+      // Reset all fields and errors
+      document.getElementById('cmQuestion').value = '';
+      document.getElementById('cmQuestionCount').textContent = '0';
+      document.getElementById('cmDeadline').value = '';
+      document.getElementById('cmFeed').value = '';
+      document.getElementById('cmTargetPrice').value = '';
+      cmMarketType = null;
+      document.getElementById('cmTypeOracle').className = 'modal-side';
+      document.getElementById('cmTypeManual').className = 'modal-side';
+      document.getElementById('cmOracleSection').classList.remove('visible');
+      document.getElementById('cmManualNote').classList.remove('visible');
+      ['cmQuestionError','cmDeadlineError','cmFeedError','cmTargetPriceError'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+      });
+      document.getElementById('btnCreateMarket').disabled = true;
+      document.getElementById('btnCreateMarket').textContent = 'Select a resolution type to continue';
+      // Minimum deadline = 1 hour from now
+      const minDt = new Date(Date.now() + 3600 * 1000);
+      document.getElementById('cmDeadline').min = minDt.toISOString().slice(0, 16);
+      document.getElementById('createMarketModal').classList.add('active');
+    }
+
+    function closeCreateMarketModal() {
+      document.getElementById('createMarketModal').classList.remove('active');
+    }
+
+    function selectMarketType(type) {
+      cmMarketType = type;
+      document.getElementById('cmTypeOracle').className = type === 'oracle' ? 'modal-side selected-yes' : 'modal-side';
+      document.getElementById('cmTypeManual').className = type === 'manual' ? 'modal-side selected-yes' : 'modal-side';
+      document.getElementById('cmOracleSection').classList.toggle('visible', type === 'oracle');
+      document.getElementById('cmManualNote').classList.toggle('visible', type === 'manual');
+      const btn = document.getElementById('btnCreateMarket');
+      btn.disabled = false;
+      btn.textContent = type === 'oracle' ? '🔗 Create Oracle Market' : '⊙ Create Manual Market';
+    }
+
+    async function createMarket() {
+      let valid = true;
+
+      // Validate question
+      const question = document.getElementById('cmQuestion').value.trim();
+      const qErr = document.getElementById('cmQuestionError');
+      if (!question) {
+        qErr.textContent = 'Market question is required.';
+        qErr.style.display = '';
+        valid = false;
+      } else if (question.length > 200) {
+        qErr.textContent = 'Question must be 200 characters or fewer.';
+        qErr.style.display = '';
+        valid = false;
+      } else {
+        qErr.style.display = 'none';
+      }
+
+      // Validate deadline
+      const deadlineStr = document.getElementById('cmDeadline').value;
+      const dErr = document.getElementById('cmDeadlineError');
+      let deadlineTs = 0;
+      if (!deadlineStr) {
+        dErr.textContent = 'Deadline is required.';
+        dErr.style.display = '';
+        valid = false;
+      } else {
+        deadlineTs = Math.floor(new Date(deadlineStr).getTime() / 1000);
+        if (deadlineTs < Math.floor(Date.now() / 1000) + 3600) {
+          dErr.textContent = 'Deadline must be at least 1 hour in the future.';
+          dErr.style.display = '';
+          valid = false;
+        } else {
+          dErr.style.display = 'none';
+        }
+      }
+
+      // Validate market type
+      if (!cmMarketType) {
+        showToast('Please select a resolution type', true);
+        return;
+      }
+
+      // Oracle-specific validation
+      let feedAddress = ZERO_ADDRESS;
+      let targetPriceInt = 0;
+      if (cmMarketType === 'oracle') {
+        const feedKey = document.getElementById('cmFeed').value;
+        const fErr = document.getElementById('cmFeedError');
+        if (!feedKey || !CHAINLINK_FEEDS[feedKey]) {
+          fErr.textContent = 'Please select a Chainlink price feed.';
+          fErr.style.display = '';
+          valid = false;
+        } else {
+          fErr.style.display = 'none';
+          feedAddress = CHAINLINK_FEEDS[feedKey].address;
+          const feedDecimals = CHAINLINK_FEEDS[feedKey].decimals;
+          const tpStr = document.getElementById('cmTargetPrice').value;
+          const tpUsd = parseFloat(tpStr);
+          const tpErr = document.getElementById('cmTargetPriceError');
+          if (!tpStr || isNaN(tpUsd) || tpUsd <= 0) {
+            tpErr.textContent = 'Target price must be greater than 0.';
+            tpErr.style.display = '';
+            valid = false;
+          } else {
+            tpErr.style.display = 'none';
+            // Convert USD → feed units (e.g. $4000 × 10^8 = 400000000000 for 8-decimal feeds)
+            targetPriceInt = Math.round(tpUsd * Math.pow(10, feedDecimals));
+          }
+        }
+      }
+
+      if (!valid) return;
+
+      const btn = document.getElementById('btnCreateMarket');
+      const origText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '⏳ Creating market…';
+
+      try {
+        const tx = await contract.createMarket(question, deadlineTs, feedAddress, targetPriceInt);
+        showToast('Transaction submitted — confirming…');
+        const receipt = await tx.wait();
+
+        // Extract marketId from MarketCreated event
+        let marketId = null;
+        for (const log of receipt.logs) {
+          try {
+            const parsed = contract.interface.parseLog({ topics: [...log.topics], data: log.data });
+            if (parsed && parsed.name === 'MarketCreated') {
+              marketId = parsed.args.marketId.toNumber();
+              break;
+            }
+          } catch (_) {}
+        }
+
+        const idStr = marketId !== null ? ` (#${marketId})` : '';
+        showToast(`✅ Market created${idStr}! 🎉`);
+        closeCreateMarketModal();
+        loadHeroMarket();
+        loadMarketsList();
+      } catch (err) {
+        console.error('createMarket error:', err);
+        const reason = err.reason || err.data?.message || err.message || 'Transaction failed';
+        showToast(reason.length > 100 ? reason.slice(0, 100) + '…' : reason, true);
+        btn.disabled = false;
+        btn.textContent = origText;
+      }
+    }
+
     // ── Wallet dropdown ───────────────────────────────────────────────────────
 
     function toggleWalletDropdown(evt) {
@@ -2181,6 +2422,15 @@
     });
     document.getElementById('withdrawModal').addEventListener('click', (e) => {
       if (e.target === e.currentTarget) closeWithdrawModal();
+    });
+    document.getElementById('createMarketModal').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) closeCreateMarketModal();
+    });
+    // Live character counter for the market question field
+    document.getElementById('cmQuestion').addEventListener('input', () => {
+      const len = document.getElementById('cmQuestion').value.length;
+      document.getElementById('cmQuestionCount').textContent = len;
+      document.getElementById('cmQuestionCount').style.color = len > 180 ? 'var(--no-red)' : 'var(--light-gray)';
     });
 
     (function() {
