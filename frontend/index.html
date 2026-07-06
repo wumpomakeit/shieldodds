@@ -152,7 +152,9 @@
     .balance-bar { display:flex; align-items:center; justify-content:space-between; gap:20px; background:linear-gradient(135deg,#FFF3E0 0%,#FFF8F0 100%); border:1px solid var(--sand); border-radius:var(--radius); padding:20px 28px; flex-wrap:wrap; }
     .balance-info { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
     .balance-label { font-weight:600; color:var(--charcoal); font-size:15px; }
-    .balance-value { font-family:'Fraunces',serif; font-size:22px; font-weight:700; color:var(--amber-dark); }
+    .balance-value { font-family:'Fraunces',serif; font-size:22px; font-weight:700; color:var(--amber-dark); transition:opacity .25s ease; }
+    @keyframes bal-tick { 0%{opacity:1} 35%{opacity:.45} 100%{opacity:1} }
+    .balance-value.bal-ticking { animation: bal-tick .45s ease; }
     .balance-note { font-size:12px; color:var(--slate); }
     .balance-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
     /* ── Balance loading progress ── */
@@ -320,7 +322,7 @@
           </div>
           <div class="hero-card-question" id="heroQuestion">Loading market data…</div>
           <div class="hero-card-stats">
-            <div class="stat-item"><div class="stat-label">Pool</div><div class="stat-value" id="heroPool">—</div></div>
+            <div class="stat-item"><div class="stat-label">Type</div><div class="stat-value" id="heroPool">—</div></div>
             <div class="stat-item"><div class="stat-label">Bets</div><div class="stat-value" id="heroBets">—</div></div>
             <div class="stat-item"><div class="stat-label">Ends</div><div class="stat-value" id="heroDeadline">—</div></div>
           </div>
@@ -824,6 +826,94 @@
       try { sessionStorage.removeItem(fheSessionKey(address)); } catch (_) {}
     }
 
+    // ── Background reconciliation ─────────────────────────────────────────────
+    // After optimistic UI updates (deposit / bet / withdraw), we run the real
+    // FHE reencrypt flow in the background to verify the displayed number.
+    // A token counter ensures only the most recent call's result is applied
+    // (race protection — if the user deposits twice quickly, the first
+    // reconcile's result is discarded when the second one finishes).
+
+    let _reconcileToken = 0;
+
+    async function backgroundReconcile() {
+      // If FHE isn't ready yet, queue for when it is
+      if (!window.fhevmReady || !window.fhevmInstance) {
+        if (!window.fhevmFailed) {
+          const handler = () => {
+            document.removeEventListener('fheReady', handler);
+            backgroundReconcile();
+          };
+          document.addEventListener('fheReady', handler);
+        }
+        return;
+      }
+      if (!contract || !userAddress || !signer) return;
+
+      const token = ++_reconcileToken;
+
+      try {
+        const balanceHandle = await withTimeout(
+          readContract.getBalanceHandle(userAddress), 15000, 'reconcile getBalanceHandle'
+        );
+
+        if (token !== _reconcileToken) return;
+
+        if (!balanceHandle || balanceHandle === ethers.constants.HashZero) {
+          localBalance = 0;
+          localBalanceLoaded = true;
+          updateBalanceDisplay();
+          return;
+        }
+
+        // Reuse cached keypair + signature — avoids another wallet prompt
+        let session = loadFheSession(userAddress);
+        if (fhevmKeypair && session && session.publicKey !== fhevmKeypair.publicKey) session = null;
+        if (!fhevmKeypair && session) fhevmKeypair = { publicKey: session.publicKey, privateKey: session.privateKey };
+
+        let signature;
+        if (session && session.signature) {
+          signature = session.signature;
+        } else {
+          if (!fhevmKeypair) fhevmKeypair = window.fhevmInstance.generateKeypair();
+          const eip712 = window.fhevmInstance.createEIP712(fhevmKeypair.publicKey, CONTRACT_ADDRESS);
+          signature = await signer._signTypedData(
+            eip712.domain, { Reencrypt: eip712.types.Reencrypt }, eip712.message
+          );
+          saveFheSession(userAddress, fhevmKeypair.publicKey, fhevmKeypair.privateKey, signature);
+        }
+
+        if (token !== _reconcileToken) return;
+
+        const decrypted = await withTimeout(
+          window.fhevmInstance.reencrypt(
+            BigInt(balanceHandle),
+            fhevmKeypair.privateKey,
+            fhevmKeypair.publicKey,
+            signature.replace('0x', ''),
+            CONTRACT_ADDRESS,
+            userAddress
+          ),
+          90000, 'background reconcile reencrypt'
+        );
+
+        if (token !== _reconcileToken) return; // superseded by a newer reconcile
+
+        const realBalance = parseFloat(ethers.utils.formatEther(decrypted.toString()));
+        const prevBalance = localBalance;
+        localBalance = realBalance;
+        localBalanceLoaded = true;
+
+        // Only trigger a DOM update if the number actually changed
+        if (Math.abs(realBalance - prevBalance) > 1e-9) {
+          updateBalanceDisplay();
+          console.log(`fhEVM: balance reconciled ${prevBalance.toFixed(4)} → ${realBalance.toFixed(4)} ETH`);
+        }
+      } catch (err) {
+        // Silent — keep the optimistic value, log for debugging only
+        console.warn('Background reconcile failed (optimistic value kept):', err.message ?? err);
+      }
+    }
+
     // ── Balance loading step progress UI ──────────────────────────────────────
 
     // Track gateway elapsed time so we can display "Contacting Zama gateway (12s)…"
@@ -1036,9 +1126,14 @@
 
     function updateBalanceDisplay() {
       const el = document.getElementById('balanceDisplay');
-      if (el) {
-        el.textContent = localBalance.toFixed(localBalance < 0.01 && localBalance > 0 ? 4 : 3) + ' ETH';
-      }
+      if (!el) return;
+      const formatted = localBalance.toFixed(localBalance < 0.01 && localBalance > 0 ? 4 : 3) + ' ETH';
+      if (el.textContent === formatted) return; // no-op when number hasn't changed
+      el.textContent = formatted;
+      // Subtle pulse so the number change is noticed but not jarring
+      el.classList.remove('bal-ticking');
+      void el.offsetWidth; // force reflow to restart animation
+      el.classList.add('bal-ticking');
     }
 
     function showBalanceBar() {
@@ -1113,7 +1208,8 @@
           } catch(_) {}
         }
 
-        document.getElementById('heroPool').textContent = m.betCount.toString() + ' placed';
+        // "Type" stat: Oracle vs Manual — distinct from the bet count shown in "Bets"
+        document.getElementById('heroPool').textContent = isOracleMarket ? '🔗 Oracle' : '⊙ Manual';
         document.getElementById('heroBets').textContent = m.betCount.toString();
         document.getElementById('heroDeadline').textContent = formatDeadline(m.deadline.toNumber()) + priceInfo;
 
@@ -1368,8 +1464,13 @@
         await tx.wait();
 
         showToast('Bet placed successfully! 🎉');
-        await loadRealBalance();
+        // Optimistic instant update: subtract bet from displayed balance immediately
+        if (localBalanceLoaded) {
+          localBalance = Math.max(0, localBalance - amount);
+          updateBalanceDisplay();
+        }
         closeBetModal();
+        backgroundReconcile(); // verify the real on-chain balance silently
 
         loadHeroMarket();
         loadMarketsList();
@@ -1452,9 +1553,15 @@
         const tx = await contract.deposit({ value: ethers.utils.parseEther(amountStr) });
         showToast('Deposit submitted — confirming…');
         await tx.wait();
-        await loadRealBalance();
+        // Optimistic instant update: display new balance immediately without waiting
+        // for the FHE gateway round-trip. backgroundReconcile() verifies silently.
+        localBalance += amount;
+        localBalanceLoaded = true;
+        setBalanceStep('done');
+        updateBalanceDisplay();
         document.getElementById('depositAmount').value = '';
         showToast('💳 Deposited ' + amountStr + ' ETH into encrypted balance!');
+        backgroundReconcile();
       } catch (err) {
         console.error('deposit error:', err);
         const reason = err.reason || err.message || 'Deposit failed';
@@ -1526,16 +1633,21 @@
         }
 
         if (requestId !== null) {
-          // Persist pending withdrawal in localStorage so it survives page reload
           savePendingWithdrawal(userAddress, requestId, amountStr);
           showToast(`✅ Withdrawal #${requestId} requested! The KMS is verifying your balance — click "Complete" when ready.`);
         } else {
           showToast('✅ Withdrawal requested! Check Pending Withdrawals to complete it.');
         }
 
-        await loadRealBalance();
+        // Optimistic: subtract from displayed balance immediately. The contract
+        // deducted from the encrypted balance at the time of the request.
+        if (localBalanceLoaded) {
+          localBalance = Math.max(0, localBalance - amount);
+          updateBalanceDisplay();
+        }
         closeWithdrawModal();
         loadPendingWithdrawals();
+        backgroundReconcile(); // verify real balance in background
       } catch (err) {
         console.error('requestWithdrawal error:', err);
         const reason = err.reason || err.message || 'Withdrawal request failed';
@@ -1723,12 +1835,12 @@
           showToast(`🎉 Withdrawal #${requestId} completed! ETH sent to your wallet.`);
           removePendingWithdrawal(userAddress, requestId);
           loadPendingWithdrawals();
-          await loadRealBalance();
+          backgroundReconcile(); // ETH left contract — reconcile real balance
         } else if (updated.cancelled) {
           showToast(`Withdrawal #${requestId} cancelled — balance was insufficient at request time.`, true);
           removePendingWithdrawal(userAddress, requestId);
           loadPendingWithdrawals();
-          await loadRealBalance();
+          backgroundReconcile(); // balance unchanged — reconcile to confirm
         }
       } catch (err) {
         console.error('completeWithdrawal error:', err);
