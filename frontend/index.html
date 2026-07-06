@@ -276,6 +276,13 @@
     .cm-oracle-section.visible { display:flex; }
     .cm-manual-note { display:none; }
     .cm-manual-note.visible { display:flex; }
+    /* ── Balance stale / refresh ── */
+    .bal-stale-note { font-size:11px; color:var(--slate); margin-top:3px; display:none; align-items:center; gap:6px; }
+    .bal-stale-note.visible { display:flex; }
+    .btn-bal-refresh { font-size:11px; color:var(--amber); background:none; border:1px solid var(--sand); border-radius:6px; padding:1px 7px; cursor:pointer; font-family:inherit; transition:all .15s; }
+    .btn-bal-refresh:hover { background:var(--cream-mid); border-color:var(--amber); }
+    .btn-max-bet { font-size:11px; font-weight:600; color:var(--amber); background:var(--cream-mid); border:1px solid var(--sand); border-radius:6px; padding:2px 8px; cursor:pointer; font-family:inherit; transition:all .15s; margin-left:6px; }
+    .btn-max-bet:hover { background:var(--cream-dark); }
     @media (max-width:1024px) { .tech-grid{grid-template-columns:1fr 1fr;} .footer-top{grid-template-columns:1fr 1fr;gap:32px;} }
     @media (max-width:900px) {
       .hero-inner{grid-template-columns:1fr;gap:40px;} .hero-visual{order:-1;} .hero-card{max-width:400px;margin:0 auto;}
@@ -503,6 +510,11 @@
           <span class="balance-note" id="balanceAddressNote" style="font-size:11px;color:var(--light-gray);display:none;"><!-- filled by JS --></span>
           <!-- Loaded state -->
           <span class="balance-value" id="balanceDisplay" style="display:none;">—</span>
+          <!-- Stale / FHE-unavailable indicator (shown below number when FHE fails) -->
+          <div class="bal-stale-note" id="balStaleNote">
+            ⚠️ cached &nbsp;
+            <button class="btn-bal-refresh" onclick="refreshBalance()">Refresh ↻</button>
+          </div>
           <!-- Loading/progress state -->
           <div class="bal-loading" id="balanceLoading" style="display:none;">
             <div class="bal-steps">
@@ -618,7 +630,7 @@
           <input type="number" id="betAmount" placeholder="0.01" min="0.001" step="0.001" />
           <span class="unit">ETH</span>
         </div>
-        <div class="modal-min-bet">Minimum: 0.001 ETH · Your balance: <span id="modalBalance">—</span></div>
+        <div class="modal-min-bet">Minimum: 0.001 ETH · Your balance: <span id="modalBalance">—</span><button class="btn-max-bet" onclick="setMaxBet()" title="Use full balance">MAX</button></div>
       </div>
       <div class="modal-note">
         <span class="note-icon">🔒</span>
@@ -907,7 +919,7 @@
         const r = getPersistedBalance(addr) || { totalDeposited: 0, totalWithdrawn: 0 };
         r.totalDeposited += amountEth;
         localStorage.setItem(_balKey(addr), JSON.stringify(r));
-      } catch (_) {}
+      } catch (err) { console.error('persistDeposit: localStorage write failed', err); }
     }
 
     function persistWithdrawal(addr, amountEth) {
@@ -915,7 +927,7 @@
         const r = getPersistedBalance(addr) || { totalDeposited: 0, totalWithdrawn: 0 };
         r.totalWithdrawn = (r.totalWithdrawn || 0) + amountEth;
         localStorage.setItem(_balKey(addr), JSON.stringify(r));
-      } catch (_) {}
+      } catch (err) { console.error('persistWithdrawal: localStorage write failed', err); }
     }
 
     function syncPersistedBalance(addr, realBalanceEth) {
@@ -925,7 +937,7 @@
         const r = getPersistedBalance(addr) || { totalDeposited: 0, totalWithdrawn: 0 };
         r.totalDeposited = realBalanceEth + (r.totalWithdrawn || 0);
         localStorage.setItem(_balKey(addr), JSON.stringify(r));
-      } catch (_) {}
+      } catch (err) { console.error('syncPersistedBalance: localStorage write failed', err); }
     }
 
     // ── localStorage helpers — bet tracking ───────────────────────────────────
@@ -1195,14 +1207,27 @@
         loading.style.display = 'none';
         error.style.display = 'none';
         display.style.display = '';
+        // Hide stale note once we have a fresh decrypt
+        const staleNote = document.getElementById('balStaleNote');
+        if (staleNote) staleNote.classList.remove('visible');
         return;
       }
 
       if (step === 'error') {
         _stopGatewayTimer();
         loading.style.display = 'none';
-        display.style.display = 'none';
-        error.style.display = '';
+        // Key fix: if we already have a displayed balance, keep it visible.
+        // Only replace it with the error span if there is no cached value.
+        if (localBalanceLoaded) {
+          // Show the number + stale warning below it; hide the error span
+          display.style.display = '';
+          error.style.display = 'none';
+          const staleNote = document.getElementById('balStaleNote');
+          if (staleNote) staleNote.classList.add('visible');
+        } else {
+          display.style.display = 'none';
+          error.style.display = '';
+        }
         return;
       }
 
@@ -1274,7 +1299,9 @@
     function setBalanceError(msg) {
       _stopGatewayTimer();
       const error = document.getElementById('balanceError');
-      if (error) error.textContent = msg;
+      if (error) {
+        error.innerHTML = `${msg} &nbsp;<button class="btn-bal-refresh" onclick="refreshBalance()">Retry ↻</button>`;
+      }
       setBalanceStep('error');
     }
 
@@ -1406,32 +1433,32 @@
       const note = document.getElementById('balanceAddressNote');
       if (note) { note.textContent = userAddress.slice(0, 6) + '…' + userAddress.slice(-4); note.style.display = ''; }
 
-      // Seed from persisted value immediately so users see their balance without
-      // waiting for the FHE gateway round-trip on every page load.
+      // ── Cached balance: show immediately, reconcile in background ────────────
+      // Key fix: always return after showing cached balance so FHE state transitions
+      // (fhe-init, error, etc.) cannot overwrite the displayed number.
       const persisted = getPersistedBalanceValue(userAddress);
       if (persisted !== null && !localBalanceLoaded) {
         localBalance = persisted;
         localBalanceLoaded = true;
         setBalanceStep('done');
         updateBalanceDisplay();
-        // Still run FHE decrypt in background to verify/correct the cached value
-        if (window.fhevmReady) { backgroundReconcile(); return; }
+        // Schedule background reconcile once FHE is available
+        if (window.fhevmReady) {
+          backgroundReconcile();
+        }
+        // Always return — prevents any FHE state from hiding the number we just showed
+        return;
       }
 
+      // ── No cache: fall back to FHE-dependent loading states ──────────────────
       if (window.fhevmReady) {
-        // FHE is ready — determine whether we'll need a wallet prompt
         const session = loadFheSession(userAddress);
         setBalanceStep(session ? 'gateway' : 'sign');
         loadRealBalance();
       } else if (window.fhevmFailed) {
-        setBalanceError('Encryption unavailable');
+        setBalanceError('Balance unavailable — FHE offline');
       } else {
-        // BUG FIX: FHE WASM is still downloading. Previously showed 'sign' here
-        // (spinner + "Check your wallet") even though no wallet popup was coming —
-        // users saw that message for 30+ seconds with nothing happening in the wallet.
-        // Now we show 'fhe-init' so users understand the real cause of the wait.
         setBalanceStep('fhe-init');
-        // loadRealBalance() is called from the 'fheReady' event listener
       }
     }
 
@@ -1706,6 +1733,12 @@
         return;
       }
 
+      // Validate against known balance to avoid burning gas on a guaranteed revert
+      if (localBalanceLoaded && amount > localBalance + 1e-9) {
+        showToast(`Amount exceeds your available balance (${localBalance.toFixed(4)} ETH).`, true);
+        return;
+      }
+
       const btn = document.getElementById('btnPlaceBet');
       btn.disabled = true;
       btn.textContent = '⏳ Encrypting bet amount…';
@@ -1728,6 +1761,16 @@
 
         const handle = '0x' + Array.from(encrypted.handles[0]).map(b => b.toString(16).padStart(2, '0')).join('');
         const proof = '0x' + Array.from(encrypted.inputProof).map(b => b.toString(16).padStart(2, '0')).join('');
+
+        // Gas simulation — catch reverts before wasting real gas
+        btn.textContent = '⏳ Simulating transaction…';
+        try {
+          await contract.estimateGas.placeBet(modalMarketId, modalSide, handle, proof);
+        } catch (simErr) {
+          const reason = simErr.reason || simErr.data?.message || simErr.message || 'Simulation failed';
+          showToast('Cannot place bet: ' + (reason.length > 100 ? reason.slice(0, 100) + '…' : reason), true);
+          return; // do NOT send the real transaction
+        }
 
         btn.textContent = '⏳ Sending transaction…';
 
@@ -2276,6 +2319,33 @@
       }
     }
 
+    // ── Balance utilities ────────────────────────────────────────────────────
+
+    function refreshBalance() {
+      if (!userAddress) return;
+      if (!window.fhevmReady || !window.fhevmInstance) {
+        showToast('FHE not ready yet — please wait and try again', true);
+        return;
+      }
+      // Hide stale note while refreshing
+      const staleNote = document.getElementById('balStaleNote');
+      if (staleNote) staleNote.classList.remove('visible');
+      const session = loadFheSession(userAddress);
+      setBalanceStep(session ? 'gateway' : 'sign');
+      loadRealBalance();
+    }
+
+    function setMaxBet() {
+      if (!localBalanceLoaded || localBalance <= 0) {
+        showToast('Balance not loaded yet', true);
+        return;
+      }
+      // Floor to 4 decimal places so we don't exceed balance due to rounding
+      const maxVal = (Math.floor(localBalance * 10000) / 10000).toFixed(4);
+      document.getElementById('betAmount').value = maxVal;
+      updatePlaceBetBtn();
+    }
+
     // ── Wallet dropdown ───────────────────────────────────────────────────────
 
     function toggleWalletDropdown(evt) {
@@ -2456,16 +2526,29 @@
       updatePlaceBetBtn();
       const balSection = document.getElementById('balance-section');
       if (userAddress && window.fhevmInstance && balSection && balSection.style.display !== 'none') {
-        // Advance from 'fhe-init' (or wherever we are) to the real first step
-        const session = loadFheSession(userAddress);
-        setBalanceStep(session ? 'gateway' : 'sign');
-        loadRealBalance();
+        if (localBalanceLoaded) {
+          // Cached balance already showing — verify silently in background
+          backgroundReconcile();
+        } else {
+          // No cached balance — run the full loading flow
+          const session = loadFheSession(userAddress);
+          setBalanceStep(session ? 'gateway' : 'sign');
+          loadRealBalance();
+        }
       }
     });
 
     document.addEventListener('fheFailed', () => {
       updatePlaceBetBtn();
-      if (!localBalanceLoaded) setBalanceError('Encryption unavailable');
+      if (localBalanceLoaded) {
+        // Cached balance visible — just add stale warning, don't hide the number
+        const staleNote = document.getElementById('balStaleNote');
+        if (staleNote) staleNote.classList.add('visible');
+        showToast('FHE gateway offline — showing cached balance', false);
+      } else {
+        // No cache at all — show a dash rather than an alarming error
+        setBalanceError('—');
+      }
     });
 
     document.addEventListener('fheRetrying', (e) => {
