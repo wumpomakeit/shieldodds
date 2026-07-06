@@ -146,6 +146,17 @@
     .balance-value { font-family:'Fraunces',serif; font-size:22px; font-weight:700; color:var(--amber-dark); }
     .balance-note { font-size:12px; color:var(--slate); }
     .balance-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    /* ── Balance loading progress ── */
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .bal-loading { display:flex; flex-direction:column; gap:6px; }
+    .bal-steps { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+    .bal-step { display:inline-flex; align-items:center; gap:5px; font-size:13px; font-weight:500; color:var(--light-gray); white-space:nowrap; }
+    .bal-step.active { color:var(--amber-dark); }
+    .bal-step.done { color:var(--yes-green); }
+    .bal-step .step-icon { font-size:12px; width:14px; text-align:center; }
+    .bal-spinner { display:inline-block; width:12px; height:12px; border:2px solid var(--sand); border-top-color:var(--amber); border-radius:50%; animation:spin .8s linear infinite; flex-shrink:0; }
+    .bal-step-sep { color:var(--sand); font-size:11px; }
+    .bal-hint { font-size:11px; color:var(--slate); font-style:italic; margin-top:1px; }
     .deposit-wrap { display:flex; align-items:center; gap:0; border:1px solid var(--sand); border-radius:var(--radius-sm); overflow:hidden; background:white; }
     .deposit-input { border:none; outline:none; padding:10px 14px; font-size:14px; width:90px; font-family:'Inter',sans-serif; background:transparent; }
     .btn-deposit { border:none; background:var(--amber); color:white; padding:10px 18px; font-size:14px; font-weight:600; cursor:pointer; white-space:nowrap; transition:background .2s; }
@@ -439,8 +450,27 @@
       <div class="balance-bar">
         <div class="balance-info">
           <span class="balance-label">🔐 Your Encrypted Balance</span>
-          <span class="balance-value" id="balanceDisplay">—</span>
-          <span class="balance-note">(decrypted on-chain via FHE re-encryption)</span>
+          <!-- Loaded state -->
+          <span class="balance-value" id="balanceDisplay" style="display:none;">—</span>
+          <!-- Loading/progress state -->
+          <div class="bal-loading" id="balanceLoading" style="display:none;">
+            <div class="bal-steps">
+              <span class="bal-step" id="bstep-sign">
+                <span class="step-icon">○</span>Requesting signature
+              </span>
+              <span class="bal-step-sep">›</span>
+              <span class="bal-step" id="bstep-gateway">
+                <span class="step-icon">○</span>Contacting Zama gateway
+              </span>
+              <span class="bal-step-sep">›</span>
+              <span class="bal-step" id="bstep-decrypt">
+                <span class="step-icon">○</span>Decrypting balance
+              </span>
+            </div>
+            <div class="bal-hint" id="balanceHint">Decrypting your private balance via FHE — this can take up to 30 seconds</div>
+          </div>
+          <!-- Error / unavailable state -->
+          <span class="balance-value" id="balanceError" style="display:none;font-size:14px;color:var(--slate);font-family:'Inter',sans-serif;font-weight:500;">—</span>
         </div>
         <div class="balance-actions">
           <div class="deposit-wrap">
@@ -733,7 +763,12 @@
           localBalanceLoaded = false;
           fhevmKeypair = null; // clear stale keypair — keypairs are address-scoped
         } else {
+          const prevAddress = userAddress;
           userAddress = accounts[0];
+          // Clear session cache for the old address so new account gets a fresh keypair+sig
+          if (prevAddress && prevAddress.toLowerCase() !== userAddress.toLowerCase()) {
+            clearFheSession(prevAddress);
+          }
           fhevmKeypair = null; // new account: always regenerate keypair
           localBalance = 0;
           localBalanceLoaded = false;
@@ -745,12 +780,110 @@
       window.ethereum.on('chainChanged', () => window.location.reload());
     }
 
+    // ── sessionStorage cache helpers ───────────────────────────────────────────
+    // We cache the FHE keypair + EIP-712 signature together as one session object.
+    // The signature is bound to the keypair's publicKey, so if the keypair is
+    // regenerated (e.g. account change) we get a fresh signature automatically.
+    // Using sessionStorage (not localStorage) means the cache clears when the tab closes.
+
+    function fheSessionKey(address) {
+      return `fhe_session_${address.toLowerCase()}_${CONTRACT_ADDRESS.toLowerCase()}`;
+    }
+
+    function loadFheSession(address) {
+      try {
+        const raw = sessionStorage.getItem(fheSessionKey(address));
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.publicKey && parsed.privateKey && parsed.signature) return parsed;
+      } catch (_) {}
+      return null;
+    }
+
+    function saveFheSession(address, publicKey, privateKey, signature) {
+      try {
+        sessionStorage.setItem(fheSessionKey(address), JSON.stringify({ publicKey, privateKey, signature }));
+      } catch (_) {}
+    }
+
+    function clearFheSession(address) {
+      try { sessionStorage.removeItem(fheSessionKey(address)); } catch (_) {}
+    }
+
+    // ── Balance loading step progress UI ──────────────────────────────────────
+
+    function setBalanceStep(step) {
+      // step: 'loading' | 'sign' | 'gateway' | 'decrypt' | 'done' | 'error' | 'zero'
+      const display = document.getElementById('balanceDisplay');
+      const loading = document.getElementById('balanceLoading');
+      const error   = document.getElementById('balanceError');
+      const hint    = document.getElementById('balanceHint');
+      if (!display || !loading || !error) return;
+
+      const steps = ['sign', 'gateway', 'decrypt'];
+      const stepOrder = { sign: 0, gateway: 1, decrypt: 2 };
+      const currentIdx = stepOrder[step] ?? -1;
+
+      if (step === 'done' || step === 'zero') {
+        loading.style.display = 'none';
+        error.style.display = 'none';
+        display.style.display = '';
+        return;
+      }
+
+      if (step === 'error') {
+        loading.style.display = 'none';
+        display.style.display = 'none';
+        error.style.display = '';
+        return;
+      }
+
+      // Show loading indicator
+      display.style.display = 'none';
+      error.style.display = 'none';
+      loading.style.display = '';
+
+      steps.forEach((s, idx) => {
+        const el = document.getElementById(`bstep-${s}`);
+        if (!el) return;
+        el.className = 'bal-step';
+        const icon = el.querySelector('.step-icon');
+        if (idx < currentIdx) {
+          el.classList.add('done');
+          if (icon) icon.textContent = '✓';
+        } else if (idx === currentIdx) {
+          el.classList.add('active');
+          if (icon) {
+            // Replace icon span with spinner for active step
+            icon.innerHTML = '';
+            icon.className = 'bal-spinner';
+          }
+        } else {
+          if (icon) { icon.className = 'step-icon'; icon.textContent = '○'; }
+        }
+      });
+
+      // Contextual hint text per step
+      if (hint) {
+        const hints = {
+          sign:    'Check your wallet — a signature request is pending (no gas required)',
+          gateway: 'Decrypting your private balance via FHE — this can take up to 30 seconds',
+          decrypt: 'Almost done — computing your plaintext balance from the FHE ciphertext…',
+        };
+        hint.textContent = hints[step] || 'Decrypting your private balance via FHE — this can take up to 30 seconds';
+      }
+    }
+
+    function setBalanceError(msg) {
+      const error = document.getElementById('balanceError');
+      if (error) error.textContent = msg;
+      setBalanceStep('error');
+    }
+
     async function loadRealBalance() {
       if (!contract || !userAddress || !window.fhevmInstance || !window.fhevmReady) return;
       try {
-        const el = document.getElementById('balanceDisplay');
-        if (el && !localBalanceLoaded) el.textContent = 'Decrypting…';
-
+        // Fetch the handle first (cheap RPC call, no user interaction)
         const balanceHandle = await readContract.getBalanceHandle(userAddress);
         if (!balanceHandle || balanceHandle === ethers.constants.HashZero) {
           localBalance = 0;
@@ -759,22 +892,51 @@
           return;
         }
 
-        // Regenerate keypair if needed (also regenerated on account change)
-        if (!fhevmKeypair) {
-          fhevmKeypair = window.fhevmInstance.generateKeypair();
+        // ── Step 1: Keypair + signature (try sessionStorage cache first) ──────
+        let session = null;
+        if (fhevmKeypair) {
+          // In-memory keypair is available — check if we also have a cached signature
+          session = loadFheSession(userAddress);
+          // Only reuse if the cached keypair matches the in-memory one
+          if (session && session.publicKey !== fhevmKeypair.publicKey) {
+            session = null; // stale — different keypair
+          }
+        } else {
+          session = loadFheSession(userAddress);
+          if (session) {
+            fhevmKeypair = { publicKey: session.publicKey, privateKey: session.privateKey };
+          }
         }
 
-        const eip712 = window.fhevmInstance.createEIP712(fhevmKeypair.publicKey, CONTRACT_ADDRESS);
-        const signature = await signer._signTypedData(
-          eip712.domain,
-          { Reencrypt: eip712.types.Reencrypt },
-          eip712.message
-        );
+        let signature;
+        if (session && session.signature) {
+          // Cache hit — skip the wallet prompt entirely
+          signature = session.signature;
+          console.log('fhEVM: reusing cached keypair + signature for', userAddress.slice(0, 8));
+          // Jump straight to gateway step
+          setBalanceStep('gateway');
+        } else {
+          // Cache miss — need wallet signature
+          if (!fhevmKeypair) {
+            fhevmKeypair = window.fhevmInstance.generateKeypair();
+          }
+          setBalanceStep('sign');
+          const eip712 = window.fhevmInstance.createEIP712(fhevmKeypair.publicKey, CONTRACT_ADDRESS);
+          signature = await signer._signTypedData(
+            eip712.domain,
+            { Reencrypt: eip712.types.Reencrypt },
+            eip712.message
+          );
+          // Persist to sessionStorage so this tab won't re-prompt
+          saveFheSession(userAddress, fhevmKeypair.publicKey, fhevmKeypair.privateKey, signature);
+          setBalanceStep('gateway');
+        }
 
-        // BUG FIX: balanceHandle is a bytes32 hex string from ethers.js. The fhevmjs
-        // reencrypt function expects a BigInt (it calls handle.toString(16) internally
-        // to build the gateway request payload). Without BigInt() the hex string would
-        // be sent as-is, producing a malformed payload and causing the gateway to reject it.
+        // ── Step 2: Gateway re-encryption request ────────────────────────────
+        // (step is already set to 'gateway' above)
+
+        // BUG FIX (from prior PR): balanceHandle is a bytes32 hex string; fhevmjs
+        // reencrypt() expects BigInt so it can call .toString(16) on it.
         const decrypted = await window.fhevmInstance.reencrypt(
           BigInt(balanceHandle),
           fhevmKeypair.privateKey,
@@ -784,14 +946,22 @@
           userAddress
         );
 
+        // ── Step 3: WASM decryption (instant, but show step for completeness) ─
+        setBalanceStep('decrypt');
         localBalance = parseFloat(ethers.utils.formatEther(decrypted.toString()));
         localBalanceLoaded = true;
+        setBalanceStep('done');
         updateBalanceDisplay();
       } catch (err) {
         console.error('loadRealBalance error:', err);
-        const el = document.getElementById('balanceDisplay');
-        if (el && !localBalanceLoaded) el.textContent = 'Error';
-        // Don't show a persistent toast on every failure — only if user triggered it
+        if (!localBalanceLoaded) {
+          // Show a user-visible error with a retry button
+          setBalanceError('Could not decrypt — ');
+          const error = document.getElementById('balanceError');
+          if (error) {
+            error.innerHTML = 'Could not decrypt balance &nbsp;<button onclick="loadRealBalance()" style="font-size:11px;padding:2px 8px;border:1px solid var(--sand);border-radius:6px;background:white;cursor:pointer;color:var(--amber);">Retry</button>';
+          }
+        }
       }
     }
 
@@ -804,18 +974,19 @@
 
     function showBalanceBar() {
       const section = document.getElementById('balance-section');
-      if (section && userAddress) {
-        section.style.display = 'block';
-        if (window.fhevmReady) {
-          loadRealBalance();
-        } else if (window.fhevmFailed) {
-          const el = document.getElementById('balanceDisplay');
-          if (el) el.textContent = 'Encryption unavailable';
-        } else {
-          const el = document.getElementById('balanceDisplay');
-          if (el) el.textContent = 'Loading…';
-          // Will be triggered by the 'fheReady' custom event (see DOMContentLoaded listener)
-        }
+      if (!section || !userAddress) return;
+      section.style.display = 'block';
+      if (window.fhevmReady) {
+        // Check if we already have a cached session — if so, we can start at 'gateway' step
+        const session = loadFheSession(userAddress);
+        setBalanceStep(session ? 'gateway' : 'sign');
+        loadRealBalance();
+      } else if (window.fhevmFailed) {
+        setBalanceError('Encryption unavailable');
+      } else {
+        // FHE not yet ready — show first step as pending (no spinner, just waiting)
+        setBalanceStep('sign');
+        // Will be triggered by 'fheReady' event listener
       }
     }
 
@@ -1022,7 +1193,9 @@
       const modalBal = document.getElementById('modalBalance');
       if (modalBal) {
         if (!localBalanceLoaded) {
-          modalBal.textContent = window.fhevmReady ? 'Loading…' : (window.fhevmFailed ? 'Unavailable' : 'Initializing…');
+          if (window.fhevmFailed) modalBal.textContent = 'Unavailable';
+          else if (window.fhevmReady) modalBal.textContent = 'Decrypting…';
+          else modalBal.textContent = 'Initializing FHE…';
         } else {
           modalBal.textContent = localBalance.toFixed(4) + ' ETH';
         }
@@ -1227,9 +1400,13 @@
       document.getElementById('withdrawAmount').value = '';
       const balEl = document.getElementById('withdrawModalBalance');
       if (balEl) {
-        balEl.textContent = localBalanceLoaded
-          ? localBalance.toFixed(4) + ' ETH'
-          : (window.fhevmReady ? 'Loading…' : (window.fhevmFailed ? 'Unavailable' : 'Initializing…'));
+        if (!localBalanceLoaded) {
+          if (window.fhevmFailed) balEl.textContent = 'Unavailable';
+          else if (window.fhevmReady) balEl.textContent = 'Decrypting…';
+          else balEl.textContent = 'Initializing FHE…';
+        } else {
+          balEl.textContent = localBalance.toFixed(4) + ' ETH';
+        }
       }
       document.getElementById('withdrawModal').classList.add('active');
     }
@@ -1545,27 +1722,22 @@
 
     document.addEventListener('fheReady', () => {
       updatePlaceBetBtn();
-      // Load balance if wallet already connected
-      if (userAddress && window.fhevmInstance) loadRealBalance();
-      // Update balance display if it was showing "Loading…"
-      const el = document.getElementById('balanceDisplay');
-      if (el && el.textContent === 'Loading…') el.textContent = 'Decrypting…';
+      // If balance section is visible, kick off loading (showBalanceBar already set the step UI)
+      if (userAddress && window.fhevmInstance && document.getElementById('balance-section').style.display !== 'none') {
+        loadRealBalance();
+      }
     });
 
     document.addEventListener('fheFailed', () => {
       updatePlaceBetBtn();
-      const el = document.getElementById('balanceDisplay');
-      if (el && (el.textContent === 'Loading…' || el.textContent === 'Decrypting…')) {
-        el.textContent = 'Encryption unavailable';
-      }
+      if (!localBalanceLoaded) setBalanceError('Encryption unavailable');
     });
 
     document.addEventListener('fheRetrying', (e) => {
       updatePlaceBetBtn();
-      const el = document.getElementById('balanceDisplay');
-      if (el && el.textContent === 'Loading…') {
-        el.textContent = `Retrying (${e.detail.attempt}/${3})…`;
-      }
+      // Keep showing the sign step with a "retrying" hint while FHE is retrying init
+      const hint = document.getElementById('balanceHint');
+      if (hint) hint.textContent = `FHE init retrying (${e.detail.attempt}/${3})… please wait`;
     });
 
     document.addEventListener('DOMContentLoaded', () => {
