@@ -4,7 +4,8 @@
   "framework": null,
   "rewrites": [
     { "source": "/", "destination": "/frontend/index.html" },
-    { "source": "/assets/:path*", "destination": "/frontend/assets/:path*" }
+    { "source": "/assets/:path*", "destination": "/frontend/assets/:path*" },
+    { "source": "/fhevm/:path*", "destination": "/frontend/fhevm/:path*" }
   ],
   "headers": [
     {

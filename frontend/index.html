@@ -9,15 +9,16 @@
   <link rel="apple-touch-icon" href="assets/favicon-180.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <!-- Preconnect to CDN and Zama gateway so TCP/TLS handshakes happen before JS runs -->
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <!-- Preconnect only to the Zama gateway (for reencrypt/publicDecrypt calls).
+       WASM files are now self-hosted — no CDN preconnect needed for them. -->
   <link rel="preconnect" href="https://gateway.sepolia.zama.ai" crossorigin />
   <link rel="dns-prefetch" href="https://relayer.testnet.zama.org" />
-  <!-- Preload WASM binaries so they are in the browser cache when fhevmjs requests them.
-       tfhe_bg.wasm is 2.83 MB — without preload the browser only discovers it after
-       lib/web.js is parsed, adding a full round-trip of latency. -->
-  <link rel="preload" as="fetch" href="https://cdn.jsdelivr.net/npm/fhevmjs@0.6.2/lib/tfhe_bg.wasm" crossorigin="anonymous" />
-  <link rel="preload" as="fetch" href="https://cdn.jsdelivr.net/npm/fhevmjs@0.6.2/lib/kms_lib_bg.wasm" crossorigin="anonymous" />
+  <!-- Preload self-hosted WASM files: browser starts the fetch before the JS runs.
+       tfhe_bg.wasm is 2.9 MB; preloading here avoids a sequential discovery delay. -->
+  <link rel="preload" as="fetch" href="/fhevm/tfhe_bg.wasm" crossorigin="anonymous" />
+  <link rel="preload" as="fetch" href="/fhevm/kms_lib_bg.wasm" crossorigin="anonymous" />
+  <!-- Preload the JS bundle itself so it's ready when the module script parses. -->
+  <link rel="modulepreload" href="/fhevm/fhevm-browser.min.js" />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Inter:wght@300..700&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js" crossorigin="anonymous"></script>
   <style>
@@ -616,57 +617,109 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    // BUG FIX: Import from lib/web.js (the actual ES module implementation) instead of
-    // bundle.js (which was a thin wrapper around window.fhevmjs that was never set,
-    // causing initFhevm() and createInstance() to silently return undefined and
-    // falsely mark fhevmReady = true).
-    import { initFhevm, createInstance } from 'https://cdn.jsdelivr.net/npm/fhevmjs@0.6.2/lib/web.js';
+    // ── Self-hosted fhevmjs browser bundle ───────────────────────────────────
+    //
+    // WHY self-hosted (not CDN):
+    //   fhevmjs@0.6.2/lib/web.js has TOP-LEVEL bare import specifiers:
+    //     import from 'ethers', 'keccak', 'bigint-buffer', 'wasm-feature-detect'
+    //   Without an import map the browser resolves them as relative URLs
+    //   (/ethers, /keccak, …) which Vercel returns as 404s — but the module
+    //   loader WAITS for those fetches, so the whole module load hangs
+    //   indefinitely (minutes to hours), never reaching our try/catch.
+    //
+    //   The self-hosted bundle at /fhevm/fhevm-browser.min.js was built with
+    //   esbuild, inlining ethers@6, js-sha3 (keccak shim), wasm-feature-detect,
+    //   and a bigint-buffer shim. WASM files (tfhe_bg.wasm, kms_lib_bg.wasm)
+    //   and the worker helper (workerHelpers.worker.js) are served alongside it
+    //   at /fhevm/* so they are same-origin (required by COOP/COEP headers).
+    import { initFhevm, createInstance } from '/fhevm/fhevm-browser.min.js';
 
     window.fhevmInstance = null;
     window.fhevmReady = false;
     window.fhevmFailed = false;
 
     const MAX_RETRIES = 3;
+    const TIMEOUT_INIT_WASM_MS  = 25000; // loading + compiling 3 MB of WASM
+    const TIMEOUT_CREATE_INS_MS = 25000; // 3 serial RPC/gateway calls inside createInstance
+
+    // Self-contained timeout helper (the one in the regular script is available
+    // on window, but define locally to be explicit about the module boundary).
+    function moduleTimeout(promise, ms, label) {
+      let timer;
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`Timeout after ${ms / 1000}s: ${label}`)), ms);
+        }),
+      ]).finally(() => clearTimeout(timer));
+    }
 
     async function initFHE(retryCount = 0) {
-      // During retries: mark as neither ready nor permanently failed
       window.fhevmReady = false;
       if (retryCount > 0) {
-        window.fhevmFailed = false; // don't show "failed" while retrying
+        window.fhevmFailed = false;
         document.dispatchEvent(new CustomEvent('fheRetrying', { detail: { attempt: retryCount } }));
       }
 
-      try {
-        await initFhevm();
-        const isLocal = window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        const rpcForFhe = isLocal ? 'https://ethereum-sepolia-rpc.publicnode.com' : window.location.origin + '/api/rpc';
-        const instance = await createInstance({
-          kmsContractAddress: '0xbE0E383937d564D7FF0BC3b46c51f0bF8d5C311A',
-          aclContractAddress: '0xf0Ffdc93b7E186bC2f8CB3dAA75D86d1930A433D',
-          networkUrl: rpcForFhe,
-          gatewayUrl: 'https://gateway.sepolia.zama.ai/',
-        });
+      const isLocal = window.location.protocol === 'file:'
+        || window.location.hostname === 'localhost'
+        || window.location.hostname === '127.0.0.1';
+      const rpcForFhe = isLocal
+        ? 'https://ethereum-sepolia-rpc.publicnode.com'
+        : window.location.origin + '/api/rpc';
 
-        if (!instance) throw new Error('createInstance returned null — check gateway/RPC config');
+      // Explicit WASM paths so initFhevm() doesn't depend on import.meta.url
+      // resolution (which would point at the bundle URL, not the .wasm files).
+      const WASM_BASE = window.location.origin + '/fhevm/';
+
+      try {
+        // ── Step 1: load and compile WASM (tfhe_bg.wasm + kms_lib_bg.wasm) ──
+        let t = Date.now();
+        console.log(`[fhEVM] initFhevm() start — attempt ${retryCount + 1}/${MAX_RETRIES + 1}`);
+        await moduleTimeout(
+          initFhevm({
+            tfheParams: WASM_BASE + 'tfhe_bg.wasm',
+            kmsParams:  WASM_BASE + 'kms_lib_bg.wasm',
+          }),
+          TIMEOUT_INIT_WASM_MS,
+          'initFhevm (WASM load/compile)'
+        );
+        console.log(`[fhEVM] initFhevm() done — ${Date.now() - t}ms`);
+
+        // ── Step 2: createInstance (fetches TFHE public key + KMS signers) ──
+        t = Date.now();
+        console.log('[fhEVM] createInstance() start');
+        const instance = await moduleTimeout(
+          createInstance({
+            kmsContractAddress: '0xbE0E383937d564D7FF0BC3b46c51f0bF8d5C311A',
+            aclContractAddress: '0xf0Ffdc93b7E186bC2f8CB3dAA75D86d1930A433D',
+            networkUrl: rpcForFhe,
+            gatewayUrl: 'https://gateway.sepolia.zama.ai/',
+          }),
+          TIMEOUT_CREATE_INS_MS,
+          'createInstance (on-chain key fetch)'
+        );
+        console.log(`[fhEVM] createInstance() done — ${Date.now() - t}ms`);
+
+        if (!instance) throw new Error('createInstance returned null');
 
         window.fhevmInstance = instance;
         window.fhevmReady = true;
         window.fhevmFailed = false;
-        console.log('fhEVM initialized ✓');
+        console.log('[fhEVM] ready ✓');
         document.dispatchEvent(new CustomEvent('fheReady'));
       } catch (err) {
-        console.error(`fhEVM init failed (attempt ${retryCount + 1}/${MAX_RETRIES + 1}):`, err);
+        console.error(`[fhEVM] init failed (attempt ${retryCount + 1}/${MAX_RETRIES + 1}):`, err.message ?? err);
         window.fhevmReady = false;
 
         if (retryCount < MAX_RETRIES) {
-          const delay = 2000 * (retryCount + 1);
-          console.log(`Retrying in ${delay / 1000}s…`);
+          const delay = 3000 * (retryCount + 1); // 3s, 6s, 9s
+          console.log(`[fhEVM] retrying in ${delay / 1000}s…`);
           setTimeout(() => initFHE(retryCount + 1), delay);
         } else {
-          // All retries exhausted — mark as permanently failed
           window.fhevmFailed = true;
           document.dispatchEvent(new CustomEvent('fheFailed', { detail: { error: err } }));
-          console.error('fhEVM initialization permanently failed after', MAX_RETRIES + 1, 'attempts.');
+          console.error('[fhEVM] permanently failed after', MAX_RETRIES + 1, 'attempts.');
         }
       }
     }
