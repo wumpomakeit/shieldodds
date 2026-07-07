@@ -272,10 +272,22 @@
     .modal-select { flex:1; padding:13px 16px; border:none; background:transparent; font-family:inherit; font-size:15px; font-weight:500; color:var(--charcoal); outline:none; cursor:pointer; appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23A8A8A8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 14px center; padding-right:36px; }
     .modal-input-wrap input[type="datetime-local"] { font-size:14px; font-weight:500; }
     .cm-field-error { font-size:12px; color:var(--no-red); margin-top:5px; display:none; }
-    .cm-oracle-section { background:rgba(232,135,58,.04); border:1px solid rgba(232,135,58,.15); border-radius:var(--radius-sm); padding:16px; display:none; flex-direction:column; gap:0; }
-    .cm-oracle-section.visible { display:flex; }
-    .cm-manual-note { display:none; }
-    .cm-manual-note.visible { display:flex; }
+    /* Oracle-only Create Market: helper text, required marker, resolution badge, datetime */
+    .cm-helper { font-size:12px; color:var(--slate); line-height:1.5; margin:0 0 8px; font-weight:400; text-transform:none; letter-spacing:0; }
+    .cm-helper-sub { color:var(--light-gray); margin:6px 0 0; }
+    .cm-required { color:var(--no-red); font-weight:700; }
+    .cm-resolution-badge { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:14px 16px; background:linear-gradient(135deg, rgba(76,175,80,.12), rgba(232,135,58,.08)); border:2px solid var(--yes-green); border-radius:var(--radius-sm); margin-bottom:8px; }
+    .cm-badge-title { font-size:15px; font-weight:700; color:var(--charcoal); display:flex; align-items:center; gap:8px; }
+    .cm-badge-tag { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:white; background:var(--yes-green); padding:3px 9px; border-radius:20px; }
+    .cm-badge-tooltip { position:relative; cursor:help; color:var(--slate); font-size:15px; line-height:1; }
+    .cm-badge-tooltip .cm-tooltip-text { visibility:hidden; opacity:0; position:absolute; right:0; bottom:calc(100% + 10px); width:240px; background:var(--charcoal); color:white; text-align:left; padding:10px 12px; border-radius:8px; font-size:12px; font-weight:400; line-height:1.5; z-index:10; transition:opacity .2s ease; box-shadow:0 8px 24px rgba(0,0,0,.25); }
+    .cm-badge-tooltip:hover .cm-tooltip-text, .cm-badge-tooltip:focus .cm-tooltip-text { visibility:visible; opacity:1; }
+    .cm-datetime { width:100%; padding:14px 16px; border:2px solid var(--cream-dark); border-radius:var(--radius-sm); background:var(--cream); font-family:inherit; font-size:15px; font-weight:600; color:var(--charcoal); outline:none; cursor:pointer; color-scheme:light; transition:border-color .2s ease; }
+    .cm-datetime:focus, .cm-datetime:hover { border-color:var(--amber); }
+    .cm-datetime::-webkit-calendar-picker-indicator { cursor:pointer; opacity:.65; padding:2px; transition:opacity .15s ease; }
+    .cm-datetime::-webkit-calendar-picker-indicator:hover { opacity:1; }
+    .btn-create-oracle { background:var(--amber)!important; color:white!important; font-size:16px; font-weight:700; box-shadow:0 4px 16px rgba(232,135,58,.28); }
+    .btn-create-oracle:hover:not(:disabled) { background:var(--amber-dark)!important; transform:translateY(-1px); box-shadow:0 6px 22px rgba(232,135,58,.38); }
     /* ── Balance stale / refresh ── */
     .bal-stale-note { font-size:11px; color:var(--slate); margin-top:3px; display:none; align-items:center; gap:6px; }
     .bal-stale-note.visible { display:flex; }
@@ -685,55 +697,53 @@
         <div style="font-size:11px;color:var(--light-gray);margin-top:4px;"><span id="cmQuestionCount">0</span>/200 characters</div>
       </div>
 
-      <!-- Resolution Type -->
+      <!-- Resolution Type — Chainlink Oracle only (automatic, transparent, fair) -->
       <div class="modal-input-group">
-        <label>Resolution Type</label>
-        <div class="modal-sides">
-          <button class="modal-side" id="cmTypeOracle" onclick="selectMarketType('oracle')">🔗 Chainlink Oracle</button>
-          <button class="modal-side" id="cmTypeManual" onclick="selectMarketType('manual')">⊙ Manual Resolution</button>
+        <label>🔗 Resolution Type</label>
+        <div class="cm-resolution-badge">
+          <span class="cm-badge-title">Chainlink Oracle <span class="cm-badge-tag">Automatic</span></span>
+          <span class="cm-badge-tooltip" tabindex="0">ⓘ
+            <span class="cm-tooltip-text">Market resolves automatically based on a real-time Chainlink price feed — no human intervention, fully transparent and fair.</span>
+          </span>
         </div>
+        <p class="cm-helper">✅ Verifiable on-chain · No manual manipulation · Fully transparent</p>
+        <input type="hidden" id="cmResolutionType" name="resolutionType" value="oracle" />
+      </div>
+
+      <!-- Chainlink Price Feed -->
+      <div class="modal-input-group" style="margin-bottom:16px;">
+        <label>🔗 Chainlink Price Feed <span class="cm-required">*</span></label>
+        <p class="cm-helper">Select the asset price feed that determines the outcome. Market resolves <strong>YES</strong> if the live price is ≥ your target at the deadline.</p>
+        <div class="modal-input-wrap">
+          <select id="cmFeed" class="modal-select" required>
+            <option value="">Select a price feed…</option>
+          </select>
+        </div>
+        <div class="cm-field-error" id="cmFeedError"></div>
+      </div>
+
+      <!-- Target Price -->
+      <div class="modal-input-group" style="margin-bottom:24px;">
+        <label>🎯 Target Price (USD) <span class="cm-required">*</span></label>
+        <p class="cm-helper">Market resolves <strong>YES</strong> if the live price is <strong>≥</strong> this value at the deadline.</p>
+        <div class="modal-input-wrap">
+          <input type="number" id="cmTargetPrice" placeholder="e.g. 4000" min="0.01" step="0.01" required style="flex:1;padding:13px 16px;border:none;background:transparent;font-family:inherit;font-size:18px;font-weight:600;color:var(--charcoal);outline:none;" />
+          <span class="unit">USD</span>
+        </div>
+        <div class="cm-field-error" id="cmTargetPriceError"></div>
+        <p class="cm-helper cm-helper-sub">Converted to 8 decimals on-chain (e.g. 4000 USD → 400000000000).</p>
       </div>
 
       <!-- Deadline -->
-      <div class="modal-input-group">
-        <label>Deadline</label>
-        <div class="modal-input-wrap">
-          <input type="datetime-local" id="cmDeadline" style="flex:1;padding:13px 16px;border:none;background:transparent;font-family:inherit;font-size:14px;font-weight:500;color:var(--charcoal);outline:none;" />
-        </div>
+      <div class="modal-input-group" style="margin-bottom:24px;">
+        <label>⏰ Deadline <span class="cm-required">*</span></label>
+        <p class="cm-helper">After this time, the market automatically resolves using the Chainlink price feed.</p>
+        <input type="datetime-local" id="cmDeadline" class="cm-datetime" required />
         <div class="cm-field-error" id="cmDeadlineError"></div>
+        <p class="cm-helper cm-helper-sub">Minimum 1 hour from now. Your local time is converted to a UTC Unix timestamp on-chain.</p>
       </div>
 
-      <!-- Oracle-specific fields -->
-      <div class="cm-oracle-section" id="cmOracleSection">
-        <div class="modal-input-group" style="margin-bottom:16px;">
-          <label>Chainlink Price Feed</label>
-          <div class="modal-input-wrap">
-            <select id="cmFeed" class="modal-select">
-              <option value="">Select a price feed…</option>
-              <option value="BTC/USD">₿ BTC / USD</option>
-              <option value="ETH/USD">Ξ ETH / USD</option>
-              <option value="LINK/USD">⬡ LINK / USD</option>
-            </select>
-          </div>
-          <div class="cm-field-error" id="cmFeedError"></div>
-        </div>
-        <div class="modal-input-group" style="margin-bottom:0;">
-          <label>Target Price (USD) <span style="font-weight:400;color:var(--slate);font-size:12px;">— market resolves YES if price ≥ target</span></label>
-          <div class="modal-input-wrap">
-            <input type="number" id="cmTargetPrice" placeholder="4000" min="0.01" step="0.01" style="flex:1;padding:13px 16px;border:none;background:transparent;font-family:inherit;font-size:18px;font-weight:600;color:var(--charcoal);outline:none;" />
-            <span class="unit">USD</span>
-          </div>
-          <div class="cm-field-error" id="cmTargetPriceError"></div>
-        </div>
-      </div>
-
-      <!-- Manual resolution note -->
-      <div class="modal-note cm-manual-note" id="cmManualNote">
-        <span class="note-icon">ℹ️</span>
-        <span>You will resolve this market manually after the deadline by choosing a YES or NO outcome. Only the market creator can call <code style="background:var(--cream-dark);padding:1px 4px;border-radius:3px;font-size:12px;">resolveManual()</code>.</span>
-      </div>
-
-      <button class="btn-place-bet" id="btnCreateMarket" onclick="createMarket()" disabled>Select a resolution type to continue</button>
+      <button class="btn-place-bet btn-create-oracle" id="btnCreateMarket" onclick="createMarket()">🔗 Create Oracle Market</button>
     </div>
   </div>
 
@@ -872,10 +882,21 @@
       'event MarketCreated(uint256 indexed marketId, string question, uint256 deadline, address indexed creator, address priceFeed, int256 targetPrice)',
     ];
 
+    // Chainlink price feeds on Sepolia. To add more feeds later, simply add an
+    // entry here — the Create Market dropdown is generated dynamically from this
+    // object, so no other code needs to change.
+    //   key      → the market pair identifier (also used as the fallback label)
+    //   address  → Sepolia Chainlink aggregator address
+    //   decimals → feed decimals (USD feeds use 8) — used to convert the target price
+    //   label    → text shown in the dropdown (optional; defaults to the key)
     const CHAINLINK_FEEDS = {
-      'BTC/USD':  { address: '0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43', decimals: 8 },
-      'ETH/USD':  { address: '0x694AA1769357215DE4FAC081bf1f309aDC325306', decimals: 8 },
-      'LINK/USD': { address: '0xc59E3633BAAC79493d908e63626716e204A45EdF', decimals: 8 },
+      'BTC/USD':   { address: '0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43', decimals: 8, label: '₿ BTC / USD' },
+      'ETH/USD':   { address: '0x694AA1769357215DE4FAC081bf1f309aDC325306', decimals: 8, label: 'Ξ ETH / USD' },
+      'LINK/USD':  { address: '0xc59E3633BAAC79493d908e63626716e204A45EdF', decimals: 8, label: '⬡ LINK / USD' },
+      'AAVE/USD':  { address: '0x6Df09E975c830ECAE5bd4eD9d90f3A95a4f88012', decimals: 8, label: '🅰 AAVE / USD' },
+      'DAI/USD':   { address: '0x14866185B1962B63C3Ea9E71BcF85af7B950B5E6', decimals: 8, label: '◈ DAI / USD' },
+      'USDC/USD':  { address: '0xA2F78ab2355fe2f984D808B5CeE7FD0A93D5270E', decimals: 8, label: '＄ USDC / USD' },
+      'MATIC/USD': { address: '0x7bAC85A8a13A4BcD8abb3eB7d6b9d095777A4C27', decimals: 8, label: '⬣ MATIC / USD' },
     };
     const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
@@ -2162,9 +2183,29 @@
       el.closest('.faq-item').classList.toggle('open');
     }
 
-    // ── Create Market ─────────────────────────────────────────────────────────
+    // ── Create Market (Chainlink Oracle only) ──────────────────────────────────
 
-    let cmMarketType = null; // 'oracle' | 'manual'
+    // Build the price-feed <select> dynamically from CHAINLINK_FEEDS so new feeds
+    // can be added by editing that object alone. Preserves the current selection.
+    function populatePriceFeeds() {
+      const sel = document.getElementById('cmFeed');
+      if (!sel) return;
+      const prev = sel.value;
+      sel.innerHTML = '<option value="">Select a price feed…</option>';
+      for (const [key, feed] of Object.entries(CHAINLINK_FEEDS)) {
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = feed.label || key;
+        sel.appendChild(opt);
+      }
+      if (prev && CHAINLINK_FEEDS[prev]) sel.value = prev;
+    }
+
+    // Local datetime string (YYYY-MM-DDTHH:mm) for a Date, for use with datetime-local inputs.
+    function toLocalDatetimeValue(date) {
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
 
     function openCreateMarketModal() {
       if (!userAddress || !contract) {
@@ -2174,39 +2215,25 @@
       // Reset all fields and errors
       document.getElementById('cmQuestion').value = '';
       document.getElementById('cmQuestionCount').textContent = '0';
+      document.getElementById('cmQuestionCount').style.color = 'var(--light-gray)';
       document.getElementById('cmDeadline').value = '';
+      populatePriceFeeds();
       document.getElementById('cmFeed').value = '';
       document.getElementById('cmTargetPrice').value = '';
-      cmMarketType = null;
-      document.getElementById('cmTypeOracle').className = 'modal-side';
-      document.getElementById('cmTypeManual').className = 'modal-side';
-      document.getElementById('cmOracleSection').classList.remove('visible');
-      document.getElementById('cmManualNote').classList.remove('visible');
       ['cmQuestionError','cmDeadlineError','cmFeedError','cmTargetPriceError'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
       });
-      document.getElementById('btnCreateMarket').disabled = true;
-      document.getElementById('btnCreateMarket').textContent = 'Select a resolution type to continue';
-      // Minimum deadline = 1 hour from now
-      const minDt = new Date(Date.now() + 3600 * 1000);
-      document.getElementById('cmDeadline').min = minDt.toISOString().slice(0, 16);
+      const btn = document.getElementById('btnCreateMarket');
+      btn.disabled = false;
+      btn.textContent = '🔗 Create Oracle Market';
+      // Minimum deadline = 1 hour from now (in the user's local time for the picker)
+      document.getElementById('cmDeadline').min = toLocalDatetimeValue(new Date(Date.now() + 3600 * 1000));
       document.getElementById('createMarketModal').classList.add('active');
     }
 
     function closeCreateMarketModal() {
       document.getElementById('createMarketModal').classList.remove('active');
-    }
-
-    function selectMarketType(type) {
-      cmMarketType = type;
-      document.getElementById('cmTypeOracle').className = type === 'oracle' ? 'modal-side selected-yes' : 'modal-side';
-      document.getElementById('cmTypeManual').className = type === 'manual' ? 'modal-side selected-yes' : 'modal-side';
-      document.getElementById('cmOracleSection').classList.toggle('visible', type === 'oracle');
-      document.getElementById('cmManualNote').classList.toggle('visible', type === 'manual');
-      const btn = document.getElementById('btnCreateMarket');
-      btn.disabled = false;
-      btn.textContent = type === 'oracle' ? '🔗 Create Oracle Market' : '⊙ Create Manual Market';
     }
 
     async function createMarket() {
@@ -2246,38 +2273,30 @@
         }
       }
 
-      // Validate market type
-      if (!cmMarketType) {
-        showToast('Please select a resolution type', true);
-        return;
-      }
-
-      // Oracle-specific validation
+      // Validate Chainlink price feed (oracle resolution is the only option)
       let feedAddress = ZERO_ADDRESS;
       let targetPriceInt = 0;
-      if (cmMarketType === 'oracle') {
-        const feedKey = document.getElementById('cmFeed').value;
-        const fErr = document.getElementById('cmFeedError');
-        if (!feedKey || !CHAINLINK_FEEDS[feedKey]) {
-          fErr.textContent = 'Please select a Chainlink price feed.';
-          fErr.style.display = '';
+      const feedKey = document.getElementById('cmFeed').value;
+      const fErr = document.getElementById('cmFeedError');
+      if (!feedKey || !CHAINLINK_FEEDS[feedKey]) {
+        fErr.textContent = 'Please select a Chainlink price feed.';
+        fErr.style.display = '';
+        valid = false;
+      } else {
+        fErr.style.display = 'none';
+        feedAddress = CHAINLINK_FEEDS[feedKey].address;
+        const feedDecimals = CHAINLINK_FEEDS[feedKey].decimals;
+        const tpStr = document.getElementById('cmTargetPrice').value;
+        const tpUsd = parseFloat(tpStr);
+        const tpErr = document.getElementById('cmTargetPriceError');
+        if (!tpStr || isNaN(tpUsd) || tpUsd <= 0) {
+          tpErr.textContent = 'Target price must be greater than 0.';
+          tpErr.style.display = '';
           valid = false;
         } else {
-          fErr.style.display = 'none';
-          feedAddress = CHAINLINK_FEEDS[feedKey].address;
-          const feedDecimals = CHAINLINK_FEEDS[feedKey].decimals;
-          const tpStr = document.getElementById('cmTargetPrice').value;
-          const tpUsd = parseFloat(tpStr);
-          const tpErr = document.getElementById('cmTargetPriceError');
-          if (!tpStr || isNaN(tpUsd) || tpUsd <= 0) {
-            tpErr.textContent = 'Target price must be greater than 0.';
-            tpErr.style.display = '';
-            valid = false;
-          } else {
-            tpErr.style.display = 'none';
-            // Convert USD → feed units (e.g. $4000 × 10^8 = 400000000000 for 8-decimal feeds)
-            targetPriceInt = Math.round(tpUsd * Math.pow(10, feedDecimals));
-          }
+          tpErr.style.display = 'none';
+          // Convert USD → feed units (e.g. $4000 × 10^8 = 400000000000 for 8-decimal feeds)
+          targetPriceInt = Math.round(tpUsd * Math.pow(10, feedDecimals));
         }
       }
 
@@ -2502,6 +2521,19 @@
       document.getElementById('cmQuestionCount').textContent = len;
       document.getElementById('cmQuestionCount').style.color = len > 180 ? 'var(--no-red)' : 'var(--light-gray)';
     });
+
+    // Populate the Chainlink price-feed dropdown from CHAINLINK_FEEDS on load.
+    populatePriceFeeds();
+
+    // Ensure the native calendar/time picker opens reliably when the deadline
+    // field is clicked (some browsers only show it via the tiny indicator icon).
+    (function() {
+      const dt = document.getElementById('cmDeadline');
+      if (!dt) return;
+      const open = () => { if (typeof dt.showPicker === 'function') { try { dt.showPicker(); } catch (_) {} } };
+      dt.addEventListener('focus', open);
+      dt.addEventListener('click', open);
+    })();
 
     (function() {
       const wrap = document.getElementById('navbarWrap');
